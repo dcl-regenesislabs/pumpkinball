@@ -62,7 +62,8 @@ export const Messages = {
   playerHit: Schemas.Map({ playerId: Schemas.String }),
 
   // Server -> client (to the victim): the pumpkin hit you.
-  damaged: Schemas.Map({ hp: Schemas.Int }),
+  // `hazard`: it was the Vampire's floor attack or ring (the pumpkin's hit is shown by the victim's own client already).
+  damaged: Schemas.Map({ hp: Schemas.Int, hazard: Schemas.Boolean }),
 
   // Client -> server: this player wants to start / end a solo run against the Vampire.
   // Server -> client (to the sender): soloAck, whether the start was accepted (not during your own round).

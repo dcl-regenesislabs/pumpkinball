@@ -19,6 +19,8 @@ import { findAvatar } from './avatars'
 let area: Entity | undefined
 let appliedKey = ''
 let visible = new Set<string>()
+let soloists = new Set<string>()
+const FLOOR_TOLERANCE = 1.5 // an avatar standing on the ring can read a little below its surface: still in the ring
 
 function myId(): string | undefined {
   return getPlayer()?.userId?.toLowerCase()
@@ -30,27 +32,32 @@ function inRing(id: string): boolean {
   const t = entity !== undefined ? Transform.getOrNull(entity) : undefined
   if (!t) return false
   const { center, size } = SOLO_RING_AREA
-  return Math.abs(t.position.x - center.x) <= size.x / 2 && Math.abs(t.position.y - center.y) <= size.y / 2 && Math.abs(t.position.z - center.z) <= size.z / 2
+  return Math.abs(t.position.x - center.x) <= size.x / 2 && t.position.y >= center.y - size.y / 2 - FLOOR_TOLERANCE && t.position.y <= center.y + size.y / 2 && Math.abs(t.position.z - center.z) <= size.z / 2
 }
 
-/** True for an avatar that is in the ring but that this client has been told to hide (its bat must hide too). */
+/**
+ * True for an avatar that is in the ring but that this client has been told to hide (its bat must hide too). Someone in a solo
+ * run counts as in the ring whatever their position reads (a jump, a fall, a lagging position): their bat is never shown to
+ * anyone who cannot see them.
+ */
 export function isHiddenFromMe(id: string): boolean {
   if (!area || visible.has(id)) return false
-  return inRing(id)
+  return soloists.has(id) || inRing(id)
 }
 
 function visibleSet(me: string): Set<string> {
   const alive: string[] = []
-  const soloists: string[] = []
+  const solos: string[] = []
   let myStatus: string = PlayerStatus.Idle
   for (const [, p] of engine.getEntitiesWith(PlayerState)) {
     if (p.status === PlayerStatus.Alive) alive.push(p.playerId)
-    else if (p.status === PlayerStatus.Solo) soloists.push(p.playerId)
+    else if (p.status === PlayerStatus.Solo) solos.push(p.playerId)
     if (p.playerId === me) myStatus = p.status
   }
+  soloists = new Set(solos)
   const out = new Set<string>([me])
   if (myStatus === PlayerStatus.Solo) return out
-  for (const id of alive.length > 0 ? alive : soloists) out.add(id)
+  for (const id of alive.length > 0 ? alive : solos) out.add(id)
   return out
 }
 

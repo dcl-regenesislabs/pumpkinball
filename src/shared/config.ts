@@ -53,7 +53,9 @@ export const FEED_TTL_MS = 12000 // how long a recap line stays on screen
 
 export const COUNTDOWN_SECONDS = 10
 export const STARTING_SECONDS = 3 // players are on the arena and the 3-2-1 plays before the pumpkin is released
-export const ROUND_MAX_SECONDS = 120
+// No normal time limit: the Vampire's hazards (shared/arenaHazards.ts) get harder until someone is left. This only ends a round that
+// somehow stalls, and the player with the most hearts wins it.
+export const ROUND_FAILSAFE_SECONDS = 900
 export const WINNER_SECONDS = 8 // includes the winner's dance and the orbiting camera
 
 export const Phase = {

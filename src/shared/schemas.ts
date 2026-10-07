@@ -48,6 +48,28 @@ export const Leaderboard = engine.defineComponent('dci:Leaderboard', {
   )
 })
 
+// Singleton: the Vampire's hazards in a multiplayer round (see shared/arenaHazards.ts). The server adds an entry when an attack is
+// scheduled and removes it when it is over; clients draw from `t0` and the server clock, so nothing streams per frame.
+export const ArenaHazards = engine.defineComponent('dci:ArenaHazards', {
+  active: Schemas.Boolean, // a round is on and the hazards are in play
+  vampireAt: Schemas.Int64, // server time (ms) the Vampire rose; 0 = not up yet
+  entries: Schemas.Array(
+    Schemas.Map({
+      id: Schemas.Int,
+      kind: Schemas.String,
+      cast: Schemas.Int,
+      t0: Schemas.Int64,
+      x: Schemas.Float,
+      z: Schemas.Float,
+      a: Schemas.Float,
+      b: Schemas.Float,
+      c: Schemas.Float,
+      d: Schemas.Float,
+      e: Schemas.Float
+    })
+  )
+})
+
 // Kept separate from GameState so the pulse doesn't resend match data.
 export const ServerHeartbeat = engine.defineComponent('dci:ServerHeartbeat', {
   at: Schemas.Int64
@@ -60,4 +82,5 @@ if (isServer()) {
   ServerHeartbeat.validateBeforeChange(serverOnly)
   Pumpkin.validateBeforeChange(serverOnly)
   Leaderboard.validateBeforeChange(serverOnly)
+  ArenaHazards.validateBeforeChange(serverOnly)
 }

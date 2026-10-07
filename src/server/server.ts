@@ -27,7 +27,7 @@ import {
   PARRY_COOLDOWN_MS,
   Phase,
   PlayerStatus,
-  ROUND_MAX_SECONDS,
+  ROUND_FAILSAFE_SECONDS,
   STARTING_SECONDS,
   SERVER_COOLDOWN_TOLERANCE,
   SERVER_SWING_VALID_MS,
@@ -41,6 +41,7 @@ import { isOnLava } from '../shared/lava'
 import { room } from '../shared/messages'
 import { initLeaderboard, recordWin, setName } from './leaderboard'
 import { loadMusicPrefs, saveMusicPrefs } from './musicPrefs'
+import { createArenaHazards } from './hazards'
 import { createPumpkin } from './pumpkin'
 import { loadSoloProgress, saveSoloProgress } from './soloProgress'
 import { GameState, PlayerState, ServerHeartbeat } from '../shared/schemas'
@@ -69,6 +70,9 @@ let winnerId = ''
 let winnerPos = Vector3.Zero()
 let roundStartedAt = 0
 let pumpkin: ReturnType<typeof createPumpkin>
+let hazards: ReturnType<typeof createArenaHazards>
+const HAZARD_GRACE_MS = 900 // after a hazard hurts someone, hazards leave them alone this long
+const lastHazardHit = new Map<string, number>()
 const SOLO_BOSS_LOOK = SOLO_BOSS_POS
 let lastPositions = new Map<string, Vector3>()
 const lastParryAt = new Map<string, number>()
@@ -82,7 +86,8 @@ const strayFirstSeen = new Map<string, number>()
 const padLastSeen = new Map<string, number>()
 
 export function initServer() {
-  pumpkin = createPumpkin({ getAlive: getAlivePlayers, onHit: hitPlayer })
+  pumpkin = createPumpkin({ getAlive: getAlivePlayers, onHit: (address) => hitPlayer(address) })
+  hazards = createArenaHazards({ getAlive: getAlivePlayers, hit: hazardHit })
   stateEntity = engine.addEntity()
   GameState.create(stateEntity, { phase, secondsLeft: 0, round: 0, queued: 0, alive: 0, winnerId: '', winnerX: 0, winnerY: 0, winnerZ: 0 })
   syncEntity(stateEntity, [GameState.componentId], 1)
@@ -224,15 +229,24 @@ export function getAlivePlayers(): string[] {
   return [...players.entries()].filter(([, p]) => p.status === PlayerStatus.Alive).map(([a]) => a)
 }
 
+/** The Vampire's floor attacks and fire rings: one heart, with a short grace so overlapping hazards cannot chain-kill. */
+function hazardHit(address: string) {
+  const now = Date.now()
+  if (now - (lastHazardHit.get(address) ?? 0) < HAZARD_GRACE_MS) return
+  if (players.get(address)?.status !== PlayerStatus.Alive) return
+  lastHazardHit.set(address, now)
+  hitPlayer(address, 'vampire')
+}
+
 /** Costs one HP; the player is eliminated at zero. */
-function hitPlayer(address: string) {
+function hitPlayer(address: string, cause: 'hp' | 'vampire' = 'hp') {
   const p = players.get(address)
   if (!p || p.status !== PlayerStatus.Alive) return
   setHp(p, p.hp - 1)
-  room.send('damaged', { hp: p.hp }, { to: [address] })
+  room.send('damaged', { hp: p.hp, hazard: cause === 'vampire' }, { to: [address] })
   room.send('playerHit', { playerId: address })
   console.log(`[SERVER] ${address} hit, ${p.hp} HP left`)
-  if (p.hp <= 0) eliminate(address, 'hp')
+  if (p.hp <= 0) eliminate(address, cause)
 }
 
 function setHp(p: Player, hp: number) {
@@ -241,9 +255,16 @@ function setHp(p: Player, hp: number) {
   if (state) state.hp = p.hp
 }
 
-export function eliminate(address: string, reason: 'hp' | 'fell' = 'hp', at?: Vector3) {
+export function eliminate(address: string, reason: 'hp' | 'fell' | 'vampire' = 'hp', at?: Vector3) {
   const p = players.get(address)
   if (!p || p.status !== PlayerStatus.Alive) return
+  // Someone must win: if the last other player went out in this same tick, this one stays in (and wins when the tick ends)
+  if (phase === Phase.Round && roundStartedWith >= 2 && getAlivePlayers().length === 1) {
+    setHp(p, Math.max(1, p.hp))
+    if (reason === 'fell') teleport(address, Vector3.create(ARENA_CENTER.x, ARENA_CENTER.y + 0.5, ARENA_CENTER.z), ARENA_CENTER)
+    console.log(`[SERVER] ${address} would have fallen with the last other player: they win`)
+    return
+  }
   setHp(p, 0)
   setStatus(address, p, PlayerStatus.Out)
   at = at ?? lastPositions.get(address) // where they were, before the teleport (clients leave a blood splat there)
@@ -252,7 +273,7 @@ export function eliminate(address: string, reason: 'hp' | 'fell' = 'hp', at?: Ve
   // Match recap for everyone. An 'hp' elimination credits whoever last parried the pumpkin.
   const parrier = reason === 'hp' ? pumpkin.lastParrier() : ''
   room.send('feed', {
-    kind: reason === 'fell' ? 'fall' : 'elim',
+    kind: reason === 'fell' ? 'fall' : reason === 'vampire' ? 'vampire' : 'elim',
     victimId: address,
     killerId: parrier && parrier !== address ? parrier : '',
     x: at?.x ?? 0,
@@ -317,6 +338,11 @@ function gameSystem(dt: number) {
       timer -= dt
       checkLava(positions)
       pumpkin.update(dt, positions)
+      try {
+        hazards.update(dt, positions)
+      } catch (error) {
+        console.log('[SERVER] hazards failed:', error) // a bug in the Vampire must never take the match (and the server) down
+      }
       const alive = getAlivePlayers().length
       const decided = roundStartedWith >= 2 ? alive <= 1 : alive === 0
       if (decided || timer <= 0) endRound()
@@ -416,6 +442,7 @@ function startRound() {
   roundStartedWith = participants.length
   roundStartedAt = Date.now()
   winnerId = ''
+  lastHazardHit.clear()
   round++
   participants.forEach(([address, p], i) => {
     setHp(p, MAX_HP)
@@ -433,14 +460,18 @@ function startRound() {
 
 /** The 3-2-1 is over: the round clock starts and the pumpkin is released. */
 function beginRound() {
-  setPhase(Phase.Round, ROUND_MAX_SECONDS)
+  setPhase(Phase.Round, ROUND_FAILSAFE_SECONDS)
   pumpkin.start()
+  hazards.start()
 }
 
 function endRound() {
   const alive = getAlivePlayers()
-  winnerId = alive.length === 1 && roundStartedWith >= 2 ? alive[0] : ''
+  // Normally exactly one is left. If the failsafe ended a stalled round, the player with the most hearts wins it.
+  const best = alive.slice().sort((a, b) => (players.get(b)?.hp ?? 0) - (players.get(a)?.hp ?? 0))[0]
+  winnerId = roundStartedWith >= 2 && alive.length >= 1 ? best : ''
   pumpkin.stop()
+  hazards.stop()
   winnerPos = (winnerId && lastPositions.get(winnerId)) || Vector3.Zero()
   if (winnerId) recordWin(winnerId) // only a real win counts: 2+ players started and exactly one is left
   setPhase(Phase.Winner, WINNER_SECONDS)
@@ -537,7 +568,7 @@ function heartbeat() {
 /** Writes GameState only when a field actually changed, to avoid resending every frame. */
 function publish() {
   const s = GameState.getMutable(stateEntity)
-  const secondsLeft = Math.max(0, Math.ceil(timer))
+  const secondsLeft = phase === Phase.Round ? 0 : Math.max(0, Math.ceil(timer)) // no countdown in a round: do not resend the state every second
   const queued = countQueued()
   const alive = getAlivePlayers().length
   if (

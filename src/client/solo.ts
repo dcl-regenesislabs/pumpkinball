@@ -486,7 +486,7 @@ function updateBossFx(dt: number) {
 // Pooled entities: pumpkins, orbs, floor hazards, the closing circle
 // ---------------------------------------------------------------------------------------------------------------------
 
-function glow(entity: Entity, color: Color4, intensity: number) {
+export function glow(entity: Entity, color: Color4, intensity: number) {
   Material.setPbrMaterial(entity, {
     albedoColor: Color4.create(color.r * 0.3, color.g * 0.3, color.b * 0.3, 0),
     emissiveColor: color,
@@ -495,7 +495,7 @@ function glow(entity: Entity, color: Color4, intensity: number) {
   })
 }
 
-function setAlpha(entity: Entity, alpha: number) {
+export function setAlpha(entity: Entity, alpha: number) {
   const m = Material.getMutable(entity)
   if (m.material?.$case === 'pbr' && m.material.pbr.albedoColor) {
     const c = m.material.pbr.albedoColor

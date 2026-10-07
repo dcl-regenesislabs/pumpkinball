@@ -1,7 +1,7 @@
 import { FEED_TTL_MS } from '../shared/config'
 
 export interface FeedEntry {
-  kind: 'elim' | 'fall'
+  kind: 'elim' | 'fall' | 'vampire'
   victimId: string
   killerId: string // '' = the pumpkin itself
   at: number

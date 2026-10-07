@@ -617,7 +617,7 @@ const FeedRow = (props: { entry: FeedEntry; index: number; key?: string }) => {
         ]
       : [
           e.killerId ? { kind: 'head', id: e.killerId } : { kind: 'pumpkin' },
-          { kind: 'text', text: e.killerId ? displayName(e.killerId) : 'The pumpkin' },
+          { kind: 'text', text: e.killerId ? displayName(e.killerId) : e.kind === 'vampire' ? 'The Vampire' : 'The pumpkin' },
           { kind: 'text', text: 'eliminated', color: EDGE },
           { kind: 'head', id: e.victimId },
           { kind: 'text', text: displayName(e.victimId) }

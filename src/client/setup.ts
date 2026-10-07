@@ -40,6 +40,7 @@ import { setupWeapons } from './weapon'
 import { isServerAlive, updateServerReadiness } from './serverReadiness'
 import { setupTargetMarker } from './targetMarker'
 import { Pumpkin } from '../shared/schemas'
+import { setupArenaHazards } from './arenaHazards'
 import { setupSolo } from './solo'
 import { solo } from './soloState'
 import { setupSoloVisibility } from './soloVisibility'
@@ -63,6 +64,7 @@ export function initClient() {
   setupVampire()
   setupSolo()
   setupSoloVisibility()
+  setupArenaHazards()
 
   // Tell the server this player's display name (once, and again if the server restarts), so a win can be shown
   // on the leaderboard by name even after they leave.
@@ -105,7 +107,7 @@ export function initClient() {
   })
   room.onMessage('feed', (d) => {
     if (solo.active) return // someone else's match: nothing of it shows in a solo run
-    const kind = d.kind === 'fall' ? 'fall' : 'elim'
+    const kind = d.kind === 'fall' ? 'fall' : d.kind === 'vampire' ? 'vampire' : 'elim'
     feed.add({ kind, victimId: d.victimId, killerId: d.killerId, at: Date.now() })
     // A splash where they fell in (the victim has already been teleported away, so the server sends the spot)
     if (kind === 'fall') lavaSplash(Vector3.create(d.x, LAVA_SURFACE_Y + 0.15, d.z))
@@ -113,7 +115,7 @@ export function initClient() {
     if (d.victimId === getPlayer()?.userId?.toLowerCase()) {
       playSfx(EVIL_LAUGH_SFX) // right as the skull appears
       parryFeedback.eliminate(
-        kind === 'fall' ? 'You touched the lava' : d.killerId ? `Eliminated by ${displayName(d.killerId)}` : 'The pumpkin got you'
+        kind === 'fall' ? 'You touched the lava' : kind === 'vampire' ? 'The Vampire got you' : d.killerId ? `Eliminated by ${displayName(d.killerId)}` : 'The pumpkin got you'
       )
     }
   })
@@ -137,11 +139,18 @@ export function initClient() {
     }
   })
   room.onMessage('damaged', (d) => {
+    if (d.hazard) {
+      // The Vampire's attacks have no local hit report like the pumpkin: show the blood and the hurt sound here
+      const me = Transform.getOrNull(engine.PlayerEntity)?.position
+      if (me) splash(Vector3.create(me.x, me.y + PUMPKIN_AIM_HEIGHT, me.z))
+      playSfx(HURT_SFX)
+    }
     if (d.hp > 0) parryFeedback.notice(`OUCH! ${d.hp} HP left`)
   })
 
   // The teleport effect, for everyone, where the player left and where they land
   room.onMessage('teleportFx', (d) => {
+    if (solo.active) return // someone else's match: its teleports never show in a solo run
     teleportFx(Vector3.create(d.fx, d.fy, d.fz))
     teleportFx(Vector3.create(d.tx, d.ty, d.tz))
   })

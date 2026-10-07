@@ -14,7 +14,9 @@ Last player standing wins.
    - A successful parry sends it to another living player, faster each time.
 4. **Don't fall** – the arena is a raised ring surrounded by a toxic-green lava moat. Touching lava is instant elimination.
 5. **Win** – the last player alive gets a winner dance and an orbiting camera, then it's back to the lobby.
-   Eliminated players spectate from the balcony. Rounds are capped at 120 seconds.
+   Eliminated players spectate from the balcony. There is no time limit: the Vampire rises in the middle after 20 seconds and
+   starts floor attacks, slow fire rings follow at 30 seconds, and it all gets harder until someone is left (tune it in
+   `src/shared/arenaHazards.ts`, `PACING`).
 
 While waiting in the lobby you can swing at pumpkin dummies, check the leaderboard wall, and tweak music/SFX volume
 (your settings are saved server-side).
