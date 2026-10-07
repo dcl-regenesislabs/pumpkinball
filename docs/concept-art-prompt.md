@@ -1,8 +1,8 @@
-# "Don't Catch It" — concept art prompts (for Gemini)
+# "Pumpkin Ball" — concept art prompts (for Gemini)
 
 ## Master prompt (paste this first)
 
-Concept art for a stylized low-poly Halloween multiplayer arena game that runs in a web browser (Decentraland). The game is called "Don't Catch It": a Blade-Ball-style dodge-and-parry game where a glowing, tumbling jack-o'-lantern pumpkin homes in on one player at a time. The targeted player must swing a baseball bat at exactly the right moment to bounce the pumpkin to another player. Players have 3 HP, and anyone who falls off the arena is out instantly. Up to ~16 players, playful and competitive, spooky but fun (not gory).
+Concept art for a stylized low-poly Halloween multiplayer arena game that runs in a web browser (Decentraland). The game is called "Pumpkin Ball": a Blade-Ball-style dodge-and-parry game where a glowing, tumbling jack-o'-lantern pumpkin homes in on one player at a time. The targeted player must swing a baseball bat at exactly the right moment to bounce the pumpkin to another player. Players have 3 HP, and anyone who falls off the arena is out instantly. Up to ~16 players, playful and competitive, spooky but fun (not gory).
 
 SCENE LAYOUT (wide establishing shot, looking north from the lobby balcony):
 - CENTER: a circular raised platform ("the ring"), about 44 m across and 4 m high. Dark purple-black matte stone, worn carved runes and pumpkin sigils, a glowing orange lip running around the edge so the drop-off reads clearly from far away.
