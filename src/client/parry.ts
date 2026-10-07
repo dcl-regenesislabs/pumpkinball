@@ -7,6 +7,7 @@ import { debug } from './debug'
 import { swingAtDummies } from './dummy'
 import { playSfx, SWING_SFX } from './sfx'
 import { parryFeedback } from './feedback'
+import { solo } from './soloState'
 
 let seq = 0
 let startedAt = -Infinity // when the last press happened (swing window, debug)
@@ -48,7 +49,7 @@ function press() {
   missPending = true
   buffered = false
   debug.press = 'press: sent'
-  room.send('parry', { seq: seq++ })
+  if (!solo.active) room.send('parry', { seq: seq++ }) // a solo swing is judged on this client only
   playSwingEmote()
 }
 

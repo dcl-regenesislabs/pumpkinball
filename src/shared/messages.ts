@@ -64,6 +64,16 @@ export const Messages = {
   // Server -> client (to the victim): the pumpkin hit you.
   damaged: Schemas.Map({ hp: Schemas.Int }),
 
+  // Client -> server: this player wants to start / end a solo run against the Vampire.
+  // Server -> client (to the sender): soloAck, whether the start was accepted (not during your own round).
+  soloStart: Schemas.Map({ seq: Schemas.Int }),
+  soloEnd: Schemas.Map({ seq: Schemas.Int }),
+  soloAck: Schemas.Map({ ok: Schemas.Boolean }),
+
+  // Solo progress. Client -> server: this player just cleared level `cleared` (saved if it is a new best).
+  // Server -> client: how many levels this player has cleared, sent after `hello`.
+  soloProgress: Schemas.Map({ cleared: Schemas.Int }),
+
   // Server -> client (sent with { to: [address] }): move this player.
   teleport: Schemas.Map({
     x: Schemas.Float,

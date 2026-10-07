@@ -15,7 +15,9 @@ import {
 } from '../shared/config'
 import { room } from '../shared/messages'
 import { stepPumpkin } from '../shared/pumpkinSim'
-import { setupControls } from './controls'
+import { setupCameraFace } from './cameraFace'
+import { setupCameraLock } from './cameraLock'
+import { inCombat, setupControls } from './controls'
 import { parryFeedback } from './feedback'
 import { requestParry, sinceLastPress, swing, updateParryFeedback } from './parry'
 import { debug } from './debug'
@@ -23,7 +25,7 @@ import { bloodSplat, setupBlood } from './blood'
 import { teleportFx, lavaSplash, parryBurst, setupEffects, setupLavaBubbles, setupLavaFlow, splash, trail, trailReset } from './effects'
 import { feed } from './feed'
 import { displayName } from './names'
-import { resolvePlatform } from './platform'
+import { isMobile, resolvePlatform } from './platform'
 import { setupLeaderboardBoard } from './leaderboard'
 import { setupLights } from './lights'
 import { setupStartLights } from './startLights'
@@ -38,6 +40,10 @@ import { setupWeapons } from './weapon'
 import { isServerAlive, updateServerReadiness } from './serverReadiness'
 import { setupTargetMarker } from './targetMarker'
 import { Pumpkin } from '../shared/schemas'
+import { setupSolo } from './solo'
+import { solo } from './soloState'
+import { setupSoloVisibility } from './soloVisibility'
+import { setupVampire } from './vampire'
 
 export function initClient() {
   preloadSfx()
@@ -54,6 +60,9 @@ export function initClient() {
   setupRoundStart()
   setupLeaderboardBoard()
   setupWinnerCinematic()
+  setupVampire()
+  setupSolo()
+  setupSoloVisibility()
 
   // Tell the server this player's display name (once, and again if the server restarts), so a win can be shown
   // on the leaderboard by name even after they leave.
@@ -75,6 +84,8 @@ export function initClient() {
   resolvePlatform()
   setupWeapons()
   setupControls()
+  setupCameraLock()
+  setupCameraFace()
 
   // E (primary action) = parry. Whether it lands is decided by the pumpkin system below (from what this
   // client sees) and validated by the server.
@@ -82,11 +93,18 @@ export function initClient() {
   engine.addSystem(() => {
     if (inputSystem.isTriggered(InputAction.IA_PRIMARY, PointerEventType.PET_DOWN)) requestParry()
   })
+  // Left click swings too, on desktop, once a game has started (a match or a solo run). Not in the lobby, so clicking
+  // things there (the Vampire, dialogs) never swings, and not during the level intro or after a level ends.
+  engine.addSystem(() => {
+    if (isMobile() || !inCombat() || solo.intro || (solo.active && solo.phase !== 'fight')) return
+    if (inputSystem.isTriggered(InputAction.IA_POINTER, PointerEventType.PET_DOWN)) requestParry()
+  })
 
   room.onMessage('resolveResult', (d) => {
     debug.server = `server: seq ${d.seq} ${d.ok ? 'accepted' : 'REJECTED (' + d.reason + ')'}`
   })
   room.onMessage('feed', (d) => {
+    if (solo.active) return // someone else's match: nothing of it shows in a solo run
     const kind = d.kind === 'fall' ? 'fall' : 'elim'
     feed.add({ kind, victimId: d.victimId, killerId: d.killerId, at: Date.now() })
     // A splash where they fell in (the victim has already been teleported away, so the server sends the spot)
@@ -100,6 +118,7 @@ export function initClient() {
     }
   })
   room.onMessage('parryHit', (d) => {
+    if (solo.active) return
     parryFeedback.recordHit()
     if (d.playerId === getPlayer()?.userId?.toLowerCase()) return // this client already showed its own burst
     const at = targetAimPosition(d.playerId)
@@ -109,6 +128,7 @@ export function initClient() {
     }
   })
   room.onMessage('playerHit', (d) => {
+    if (solo.active) return
     if (d.playerId === getPlayer()?.userId?.toLowerCase()) return // this client already showed its own splash
     const at = targetAimPosition(d.playerId)
     if (at) {
@@ -204,6 +224,13 @@ function setupPumpkin() {
     let flight
     for (const [, p] of engine.getEntitiesWith(Pumpkin)) flight = p
     const t = Transform.getMutable(body)
+    if (solo.active) {
+      // A solo run draws its own pumpkin and trail (solo.ts); this one must not touch the shared trail
+      t.scale = Vector3.Zero()
+      lastServerSeq = -1
+      curSeq = -1
+      return
+    }
     if (!flight || !flight.active) {
       t.scale = Vector3.Zero()
       lastServerSeq = -1

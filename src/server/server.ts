@@ -1,4 +1,5 @@
 import { engine, Entity, PlayerIdentityData, Transform } from '@dcl/sdk/ecs'
+import { EntityNames } from '../../assets/scene/entity-names'
 import { Vector3 } from '@dcl/sdk/math'
 import { syncEntity } from '@dcl/sdk/network'
 import {
@@ -17,6 +18,9 @@ import {
   MAX_HP,
   LOBBY_CENTER,
   LOBBY_MIN_Y,
+  LOBBY_VAMPIRE_SPOT,
+  VAMPIRE_LOBBY_POS,
+  VAMPIRE_TALK_DISTANCE,
   LOBBY_SPAWN,
   sceneSpawnPoint,
   MIN_PLAYERS,
@@ -27,14 +31,18 @@ import {
   STARTING_SECONDS,
   SERVER_COOLDOWN_TOLERANCE,
   SERVER_SWING_VALID_MS,
+  SOLO_BOSS_POS,
+  SOLO_SPAWN,
   SPECTATOR_SPOT,
   WINNER_SECONDS
 } from '../shared/config'
 import { isOnLava } from '../shared/lava'
+
 import { room } from '../shared/messages'
 import { initLeaderboard, recordWin, setName } from './leaderboard'
 import { loadMusicPrefs, saveMusicPrefs } from './musicPrefs'
 import { createPumpkin } from './pumpkin'
+import { loadSoloProgress, saveSoloProgress } from './soloProgress'
 import { GameState, PlayerState, ServerHeartbeat } from '../shared/schemas'
 
 type Status = (typeof PlayerStatus)[keyof typeof PlayerStatus]
@@ -61,6 +69,7 @@ let winnerId = ''
 let winnerPos = Vector3.Zero()
 let roundStartedAt = 0
 let pumpkin: ReturnType<typeof createPumpkin>
+const SOLO_BOSS_LOOK = SOLO_BOSS_POS
 let lastPositions = new Map<string, Vector3>()
 const lastParryAt = new Map<string, number>()
 // The press each player last spent on a parry claim, so one press can't parry twice.
@@ -126,11 +135,56 @@ export function initServer() {
     }
   })
 
+  // Solo run against the Vampire: the game itself is local to that client. The server only marks the player 'solo' (synced,
+  // so every client can decide who to hide in the ring), moves them in and out, and leaves them alone otherwise.
+  room.onMessage('soloStart', (data, context) => {
+    if (!context) return
+    const address = context.from.toLowerCase()
+    console.log(`[SERVER] soloStart from ${context.from} (seq ${data.seq})`)
+    const player = players.get(address)
+    // Starting again while still marked 'solo' (stale from an earlier session that closed mid-run) is fine: it just restarts.
+    const allowed =
+      player &&
+      (player.status === PlayerStatus.Idle || player.status === PlayerStatus.Queued || player.status === PlayerStatus.Out || player.status === PlayerStatus.Solo)
+    if (!player || !allowed) {
+      room.send('soloAck', { ok: false }, { to: [address] })
+      return
+    }
+    padLastSeen.delete(address)
+    setStatus(address, player, PlayerStatus.Solo)
+    // seq 1 = the client is already in a run and only asks to be marked 'solo' again (no teleport, no answer needed)
+    if (data.seq === 1) return
+    teleport(address, SOLO_SPAWN, SOLO_BOSS_LOOK, false)
+    room.send('soloAck', { ok: true }, { to: [address] })
+    console.log(`[SERVER] ${address} started a solo run`)
+  })
+  room.onMessage('soloProgress', (data, context) => {
+    if (context) saveSoloProgress(context.from.toLowerCase(), data.cleared)
+  })
+  room.onMessage('soloEnd', (data, context) => {
+    if (!context) return
+    const address = context.from.toLowerCase()
+    const player = players.get(address)
+    if (!player || player.status !== PlayerStatus.Solo) return
+    setStatus(address, player, PlayerStatus.Idle)
+    // seq 1: they beat the whole run, so they come back standing by the Vampire (who talks to them)
+    if (data.seq === 1) {
+      const talk = vampireTalkSpot()
+      teleport(address, talk.spot, talk.lookAt, false)
+    }
+    else teleport(address, LOBBY_SPAWN, LOBBY_CENTER, false)
+    console.log(`[SERVER] ${address} left the solo run`)
+  })
+
   initLeaderboard()
   room.onMessage('hello', (data, context) => {
     if (!context) return
     const address = context.from.toLowerCase()
     setName(address, data.name)
+    // A client that just connected cannot be in a solo run (the run lives in the client): clear any stale 'solo' status
+    const hello = players.get(address)
+    if (hello && hello.status === PlayerStatus.Solo) setStatus(address, hello, PlayerStatus.Idle)
+    void loadSoloProgress(address).then((cleared) => room.send('soloProgress', { cleared }, { to: [address] }))
     void loadMusicPrefs(address).then((prefs) => {
       room.send(
         'musicPrefs',
@@ -325,6 +379,7 @@ function setStatus(address: string, p: Player, status: Status) {
 function updateQueue(positions: Map<string, Vector3>) {
   const now = Date.now()
   for (const [address, p] of players) {
+    if (p.status === PlayerStatus.Solo) continue // in their own run: never queued, never un-queued
     const pos = positions.get(address)
     if (!pos) continue
     const dist = flatDistance(pos, LOBBY_CENTER)
@@ -393,6 +448,7 @@ function endRound() {
 
 function resetToLobby() {
   for (const [address, p] of players) {
+    if (p.status === PlayerStatus.Solo) continue // a solo run goes on through other players' matches
     if (p.status === PlayerStatus.Alive || p.status === PlayerStatus.Out) {
       teleport(address, LOBBY_SPAWN, LOBBY_CENTER)
     }
@@ -417,7 +473,7 @@ function rescueStrays(positions: Map<string, Vector3>) {
   for (const [address, p] of players) {
     const pos = positions.get(address)
     // in the round, or up on the balcony: nothing to do (and forget any earlier sighting)
-    if (p.status === PlayerStatus.Alive || !pos || pos.y >= LOBBY_MIN_Y) {
+    if (p.status === PlayerStatus.Alive || p.status === PlayerStatus.Solo || !pos || pos.y >= LOBBY_MIN_Y) {
       strayFirstSeen.delete(address)
       continue
     }
@@ -437,10 +493,29 @@ function rescueStrays(positions: Map<string, Vector3>) {
   }
 }
 
-function teleport(address: string, to: Vector3, lookAt: Vector3) {
+/** `fx` false = no sparkle for the other players (a solo player slipping in and out of the ring unseen). */
+/**
+ * Where a player stands to talk to the lobby Vampire: in front of him, wherever he is placed in the editor (his position and
+ * the way he faces are read from the scene), so moving or turning him needs no code change. Falls back to the config spot.
+ */
+function vampireTalkSpot(): { spot: Vector3; lookAt: Vector3 } {
+  const entity = engine.getEntityOrNullByName(EntityNames.Vampire_glb)
+  const t = entity !== null ? Transform.getOrNull(entity) : null
+  if (!t) return { spot: LOBBY_VAMPIRE_SPOT, lookAt: VAMPIRE_LOBBY_POS }
+  const forward = Vector3.rotate(Vector3.Forward(), t.rotation)
+  const len = Math.hypot(forward.x, forward.z) || 1
+  const spot = Vector3.create(
+    t.position.x + (forward.x / len) * VAMPIRE_TALK_DISTANCE,
+    t.position.y + 0.65, // his feet are at the floor; players land a little above it
+    t.position.z + (forward.z / len) * VAMPIRE_TALK_DISTANCE
+  )
+  return { spot, lookAt: Vector3.create(t.position.x, t.position.y, t.position.z) }
+}
+
+function teleport(address: string, to: Vector3, lookAt: Vector3, fx = true) {
   lastTeleportAt.set(address, Date.now())
   const from = lastPositions.get(address) ?? to
-  room.send('teleportFx', { fx: from.x, fy: from.y, fz: from.z, tx: to.x, ty: to.y, tz: to.z }) // everyone sees it
+  if (fx) room.send('teleportFx', { fx: from.x, fy: from.y, fz: from.z, tx: to.x, ty: to.y, tz: to.z }) // everyone sees it
   room.send(
     'teleport',
     { x: to.x, y: to.y, z: to.z, lookX: lookAt.x, lookY: 1, lookZ: lookAt.z },

@@ -68,7 +68,8 @@ export const PlayerStatus = {
   Idle: 'idle',
   Queued: 'queued',
   Alive: 'alive',
-  Out: 'out'
+  Out: 'out',
+  Solo: 'solo' // playing alone against the Vampire in the ring (local game; the server only tracks who is in it)
 } as const
 
 // Dev switch: lets a single player start a round. Keep false for real play (a round needs 2+ players).
@@ -202,3 +203,59 @@ export const LEADERBOARD = {
 export const WINNER_DANCE_EMOTE = 'dance'
 // The camera stands on the arena side of the winner (always open space), looks at them, and slowly zooms in.
 export const WINNER_CAMERA = { startDistance: 7.5, endDistance: 3.6, height: 1.7, lookAtHeight: 1.25 }
+
+// ---- Single player (the Vampire) ----
+// The ring is shared: a solo run is a local game on the same arena. Other players never see its pumpkin, boss or hazards
+// (they are not synced), and avatars are hidden per viewer with an AvatarModifierArea (client/soloVisibility.ts).
+// Box over the ring that hides avatars. It must NOT reach the balcony (z from about 113) or the spectator spot.
+export const SOLO_RING_AREA = {
+  center: Vector3.create(80, ARENA_FLOOR_Y + 8, 80),
+  size: Vector3.create(50, 16, 50)
+}
+// Where a player who just beat the whole solo run stands when the Vampire talks to them, and where he stands (the lobby NPC placed
+// in the editor). On the balcony, clear of the join pad.
+export const VAMPIRE_LOBBY_POS = Vector3.create(101, 11.25, 114.5) // fallback: the server reads his real placement from the scene
+export const LOBBY_VAMPIRE_SPOT = Vector3.create(98, 11.9, 116.2) // fallback: about 3.4 m in front of him
+export const VAMPIRE_TALK_DISTANCE = 3.4 // how far in front of him a player is brought for the closing talk
+export const SOLO_SPAWN = Vector3.create(80, ARENA_FLOOR_Y + 0.5, 84) // where a solo player lands, facing the boss
+export const SOLO_BOSS_POS = Vector3.create(80, ARENA_FLOOR_Y, 69)
+export const VAMPIRE_MODEL = 'assets/models/npcs/Vampire.glb'
+export const VAMPIRE_SCALE = 1.41 // same as the lobby Vampire placed in the editor
+export const VAMPIRE_BOSS_HP = 3 // hits to defeat him (level 1)
+// ---- Vampire tuning: change a number, save, and the preview reloads ----
+export const VAMPIRE_HAND_Y = 4.2 // how high the pumpkin appears while he charges it, above his feet (his raised hand during blast_left)
+export const VAMPIRE_STRIKE_Y = 1.3 // height the pumpkin comes back to and leaves from after the throw: about player height
+export const VAMPIRE_HAND_FORWARD = 0.5 // metres toward the player from his centre
+export const VAMPIRE_HAND_SIDE = 0 // metres to his side (try 0.6 or -0.6 to line it up with the left hand)
+export const VAMPIRE_BODY_Y = 2.0 // where hits on him burst (his chest)
+export const VAMPIRE_APPEAR_S = 0.8 // he grows in with the spawn effect
+// Vampire clip lengths in seconds (read from the model)
+export const VAMPIRE_CLIPS = { blast_left: 1.96, swing: 1.29, hurt: 0.71, kneel: 1.79 }
+export const VAMPIRE_BLAST_APPEAR_S = 0.3 // into blast_left: the pumpkin shows up in his hand and starts charging
+export const PUMPKIN_CHARGE_START_SCALE = 0.2 // how small it starts; the charging energy grows it to full size by the throw
+export const VAMPIRE_BLAST_LAUNCH_S = 1.5 // into blast_left: the pumpkin is thrown
+export const VAMPIRE_SWING_SPEED = 1.8 // his swing animation plays this many times faster
+export const VAMPIRE_SWING_HIT_S = 0.45 / VAMPIRE_SWING_SPEED // seconds into the (sped-up) swing when the bat connects and the pumpkin goes back
+export const VAMPIRE_RUN_SPEED = 7 // m/s when he relocates after being hit
+export const VAMPIRE_RUN_ANIM_SPEED = 1.6 // his run animation plays this many times faster (raise it if his feet look slow for the ground he covers)
+export const VAMPIRE_ROAM_AFTER_HITS = 2 // from this many hits on him he keeps running around the ring even while the pumpkin is in play
+export const VAMPIRE_MOVE_RADIUS = { min: 9, max: 16 } // where he may stand, distance from the ring's centre
+export const VAMPIRE_MOVE_MIN_FROM_PLAYER = 9 // he never relocates closer than this to you
+export const VAMPIRE_MOVE_MIN_DISTANCE = 6 // and always moves at least this far
+
+// Testing: shows the level buttons (1-5) and the KILL 1 button in the solo HUD. Off for now; set true to bring them back.
+export const SOLO_LEVEL_SELECT = false
+
+// Level intro: a camera shows the bosses rising out of the floor before they start moving.
+export const INTRO_FIRST_SPAWN_S = 0.7 // before the first boss appears
+export const INTRO_STAGGER_S = 0.5 // between bosses
+export const INTRO_RISE_S = 0.9 // a boss rising out of the floor
+export const INTRO_HOLD_S = 1.3 // after the last one is up, before the fight starts
+
+// Marker ring under every boss (NPCTargetRing.glb: a flat ring of radius 1), so they are easy to spot on the arena at night.
+export const NPC_RING_MODEL = 'assets/models/NPCTargetRing.glb'
+export const NPC_RING_RADIUS = 1.7 // metres for a normal-sized boss (scales with the boss, so the Vampire Master gets a bigger one)
+export const NPC_RING_SPIN_DEG_PER_S = 70
+export const NPC_RING_LIFT = 0.1 // above the floor
+// A boss flashes red for an instant when a pumpkin hits him.
+export const NPC_HURT_FLASH_S = 0.18

@@ -3,6 +3,7 @@ import { BAT_ICON, Phase, PlayerStatus } from '../shared/config'
 import { SOUND_MENU_ICON, SOUND_TOUCH_ACTION } from './music'
 import { GameState, PlayerState } from '../shared/schemas'
 import { getPlayer } from '@dcl/sdk/src/players'
+import { solo } from './soloState'
 
 type Mode = 'lobby' | 'combat'
 
@@ -17,8 +18,9 @@ const GAMEPAD_BUTTONS = [
   InputAction.IA_ACTION_6
 ]
 
-/** Combat = alive in a running round. Everyone else (lobby, countdown, eliminated) is in lobby mode. */
+/** Combat = alive in a running round, or in a solo run. Everyone else (lobby, countdown, eliminated) is in lobby mode. */
 export function inCombat(): boolean {
+  if (solo.active) return true // a solo run is combat too (jump lock, bat button)
   const me = getPlayer()?.userId?.toLowerCase()
   if (!me) return false
   let roundRunning = false

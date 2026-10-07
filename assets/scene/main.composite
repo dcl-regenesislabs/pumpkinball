@@ -1342,14 +1342,9 @@
         "573": {
           "json": {
             "position": {
-              "x": 110.25,
+              "x": 110.75,
               "y": 11.25,
-              "z": 112.75
-            },
-            "scale": {
-              "x": 0.8293619751930237,
-              "y": 0.8293619751930237,
-              "z": 0.8293619751930237
+              "z": 114
             },
             "rotation": {
               "x": 0,
@@ -1357,20 +1352,20 @@
               "z": 0,
               "w": 0.7933533191680908
             },
+            "scale": {
+              "x": 0.8293619751930237,
+              "y": 0.8293619751930237,
+              "z": 0.8293619751930237
+            },
             "parent": 0
           }
         },
         "574": {
           "json": {
             "position": {
-              "x": 105.25,
+              "x": 104.5,
               "y": 11.25,
-              "z": 107
-            },
-            "scale": {
-              "x": 0.8293619751930237,
-              "y": 0.8293619751930237,
-              "z": 0.8293619751930237
+              "z": 106
             },
             "rotation": {
               "x": 0,
@@ -1378,20 +1373,20 @@
               "z": 0,
               "w": 0.9914448857307434
             },
+            "scale": {
+              "x": 0.8293619751930237,
+              "y": 0.8293619751930237,
+              "z": 0.8293619751930237
+            },
             "parent": 0
           }
         },
         "575": {
           "json": {
             "position": {
-              "x": 100.25,
+              "x": 97.25,
               "y": 11.25,
-              "z": 110.5
-            },
-            "scale": {
-              "x": 0.8293619751930237,
-              "y": 0.8293619751930237,
-              "z": 0.8293619751930237
+              "z": 110.75
             },
             "rotation": {
               "x": 0,
@@ -1399,26 +1394,31 @@
               "z": 0,
               "w": 0.9914448857307434
             },
+            "scale": {
+              "x": 0.8293619751930237,
+              "y": 0.8293619751930237,
+              "z": 0.8293619751930237
+            },
             "parent": 0
           }
         },
         "576": {
           "json": {
             "position": {
-              "x": 105.5,
+              "x": 102.75,
               "y": 11.25,
-              "z": 116.5
-            },
-            "scale": {
-              "x": 0.8293619751930237,
-              "y": 0.8293619751930237,
-              "z": 0.8293619751930237
+              "z": 119.5
             },
             "rotation": {
               "x": 0,
               "y": -0.8660253882408142,
               "z": 0,
               "w": 0.5
+            },
+            "scale": {
+              "x": 0.8293619751930237,
+              "y": 0.8293619751930237,
+              "z": 0.8293619751930237
             },
             "parent": 0
           }
@@ -1545,6 +1545,27 @@
               "y": 0.30077633261680603,
               "z": 0,
               "w": 0.9536947011947632
+            },
+            "parent": 0
+          }
+        },
+        "66119": {
+          "json": {
+            "position": {
+              "x": 101,
+              "y": 11.25,
+              "z": 114.5
+            },
+            "rotation": {
+              "x": 0,
+              "y": -0.5,
+              "z": 0,
+              "w": 0.8660253882408142
+            },
+            "scale": {
+              "x": 1.411953091621399,
+              "y": 1.411953091621399,
+              "z": 1.411953091621399
             },
             "parent": 0
           }
@@ -1747,6 +1768,76 @@
             "states": [
               {
                 "clip": "FlameIdle",
+                "playing": false,
+                "weight": -1,
+                "speed": 1,
+                "loop": false,
+                "shouldReset": false
+              }
+            ]
+          }
+        },
+        "66119": {
+          "json": {
+            "states": [
+              {
+                "clip": "blast_left",
+                "playing": false,
+                "weight": -1,
+                "speed": 1,
+                "loop": false,
+                "shouldReset": false
+              },
+              {
+                "clip": "hurt",
+                "playing": false,
+                "weight": -1,
+                "speed": 1,
+                "loop": false,
+                "shouldReset": false
+              },
+              {
+                "clip": "idle",
+                "playing": false,
+                "weight": -1,
+                "speed": 1,
+                "loop": false,
+                "shouldReset": false
+              },
+              {
+                "clip": "kneel",
+                "playing": false,
+                "weight": -1,
+                "speed": 1,
+                "loop": false,
+                "shouldReset": false
+              },
+              {
+                "clip": "kneel_idle",
+                "playing": false,
+                "weight": -1,
+                "speed": 1,
+                "loop": false,
+                "shouldReset": false
+              },
+              {
+                "clip": "run",
+                "playing": false,
+                "weight": -1,
+                "speed": 1,
+                "loop": false,
+                "shouldReset": false
+              },
+              {
+                "clip": "swing",
+                "playing": false,
+                "weight": -1,
+                "speed": 1,
+                "loop": false,
+                "shouldReset": false
+              },
+              {
+                "clip": "talk",
                 "playing": false,
                 "weight": -1,
                 "speed": 1,
@@ -2249,6 +2340,13 @@
             "visibleMeshesCollisionMask": 0,
             "invisibleMeshesCollisionMask": 3
           }
+        },
+        "66119": {
+          "json": {
+            "src": "assets/models/npcs/Vampire.glb",
+            "visibleMeshesCollisionMask": 0,
+            "invisibleMeshesCollisionMask": 3
+          }
         }
       }
     },
@@ -2619,6 +2717,11 @@
           "json": {
             "value": "Pillar02.glb_6"
           }
+        },
+        "66119": {
+          "json": {
+            "value": "Vampire.glb"
+          }
         }
       }
     },
@@ -2664,9 +2767,9 @@
         "serializationType": "map"
       },
       "data": {
-        "0": {
+        "573": {
           "json": {
-            "gizmo": 0
+            "gizmo": 1
           }
         }
       }
@@ -2742,7 +2845,8 @@
                   581,
                   582,
                   578,
-                  579
+                  579,
+                  66119
                 ]
               },
               {
@@ -3086,6 +3190,10 @@
               {
                 "entity": 582,
                 "children": []
+              },
+              {
+                "entity": 66119,
+                "children": []
               }
             ]
           }
@@ -3334,6 +3442,9 @@
           "json": {}
         },
         "582": {
+          "json": {}
+        },
+        "66119": {
           "json": {}
         }
       }
@@ -3680,17 +3791,19 @@
       "data": {
         "0": {
           "json": {
-            "name": "Don't Catch It!",
-            "description": "Pumpkin dodgeball. Parry the pumpkin or be eliminated.",
-            "thumbnail": "assets/images/Dont Catch It Thumbnail.png",
+            "name": "Pumpkin Ball!",
+            "description": "Pumpkin dodgeball. Parry the pumpkin or be eliminated. Defeat powerful foes",
+            "thumbnail": "assets/images/Pumpkin Ball Graveyard Showdown.png",
             "ageRating": "A",
             "categories": [
               "game"
             ],
-            "author": "",
-            "email": "",
             "tags": [],
             "layout": {
+              "base": {
+                "x": 0,
+                "y": 0
+              },
               "parcels": [
                 {
                   "x": 0,
@@ -4092,14 +4205,8 @@
                   "x": 9,
                   "y": 0
                 }
-              ],
-              "base": {
-                "x": 0,
-                "y": 0
-              }
+              ]
             },
-            "silenceVoiceChat": false,
-            "disablePortableExperiences": false,
             "spawnPoints": [
               {
                 "name": "spawn1",
@@ -4134,10 +4241,7 @@
                 }
               }
             ],
-            "skyboxConfig": {},
-            "creator": "",
-            "disableNearbyVoiceChat": false,
-            "hideLandscapeTerrain": false
+            "skyboxConfig": {}
           }
         }
       }

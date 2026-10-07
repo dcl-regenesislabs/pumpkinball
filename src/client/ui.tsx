@@ -3,7 +3,7 @@ import { Color4 } from '@dcl/sdk/math'
 import ReactEcs, { Label, ReactEcsRenderer, UiEntity } from '@dcl/sdk/react-ecs'
 import { getPlayer } from '@dcl/sdk/src/players'
 import { IN_PROGRESS_SIGN_IMAGE, JOIN_SIGN_IMAGE } from './startSign'
-import { BAT_ICON, FEED_TTL_MS, MAX_HP, PARRY_COOLDOWN_MS, Phase, PlayerStatus, DEBUG_HUD } from '../shared/config'
+import { BAT_ICON, FEED_TTL_MS, MAX_HP, PARRY_COOLDOWN_MS, Phase, PlayerStatus, DEBUG_HUD, SOLO_LEVEL_SELECT } from '../shared/config'
 import { GameState, PlayerState, Pumpkin } from '../shared/schemas'
 import { NOTICE_SHOW_MS, parryFeedback } from './feedback'
 import { debug } from './debug'
@@ -12,9 +12,13 @@ import { displayName } from './names'
 import { hasSwung, parryCooldown, requestParry } from './parry'
 import { isMobile } from './platform'
 import { MUSIC_ICONS, music, sfxPrefs, soundPanel } from './music'
-import { playSfx, SWING_SFX } from './sfx'
+import { playSfx, SWING_SFX, VAMPIRE_VOICE_SFX } from './sfx'
 import { sinceRoundStart, START_IMAGE, START_SHOW_MS } from './roundStart'
 import { isServerAlive } from './serverReadiness'
+import { solo, vampireDialog } from './soloState'
+import { jumpToLevel, killOneBoss, leaveSolo, nextSoloLevel, retrySolo } from './solo'
+import { LEVELS } from '../shared/soloLevels'
+import { acceptVampireFight, closeVampireDialog, vampireLines } from './vampire'
 
 const ORANGE = Color4.create(1, 0.6, 0.1, 1)
 const RED = Color4.create(1, 0.1, 0.1, 1)
@@ -333,7 +337,7 @@ const StartBanner = () => {
 }
 
 /** Short pop-up under the hearts for what just happened: PARRY!, OUCH!, Missed. Pops in, then fades. */
-const FeedbackPop = (props: { text: string; age: number }) => {
+const FeedbackPop = (props: { text: string; age: number; top?: number }) => {
   const t = props.text
   const good = t.startsWith('PARRY')
   const bad = t.startsWith('OUCH')
@@ -348,7 +352,7 @@ const FeedbackPop = (props: { text: string; age: number }) => {
     <UiEntity
       uiTransform={{
         positionType: 'absolute',
-        position: { top: HS(132), left: '50%' },
+        position: { top: props.top ?? HS(132), left: '50%' },
         margin: { left: -Math.round(w / 2) },
         width: w,
         height: h,
@@ -780,8 +784,8 @@ const HEART_EMPTY = 'assets/images/HeartEmpty.png'
 let lastHp = -1
 
 /** Hearts under the status banner. A heart that was just lost pops as it empties. */
-const Hearts = () => {
-  const hp = myHp()
+const Hearts = (props: { hp?: number; top?: number }) => {
+  const hp = props.hp ?? myHp()
   if (lastHp >= 0 && hp < lastHp) for (let i = hp; i < lastHp; i++) popPress(`heart-${i}`)
   lastHp = hp
   const size = HS(46)
@@ -804,7 +808,7 @@ const Hearts = () => {
     <UiEntity
       uiTransform={{
         positionType: 'absolute',
-        position: { top: HS(66), left: '50%' },
+        position: { top: props.top ?? HS(66), left: '50%' },
         margin: { left: -Math.round(total / 2) },
         width: total,
         height: size,
@@ -1104,8 +1108,308 @@ const PromptToast = (props: { msg: ToastMsg | undefined }) => {
   )
 }
 
+
+// ---- Solo run (the Vampire): boss bar, hearts, parry button, and the end card ----
+
+/** One health bar per boss (names above), up to three to a row so a six-boss level still fits. */
+const BOSS_BARS_TOP = () => HS(64)
+const BOSS_ROW_H = () => HS(34)
+const bossRows = () => Math.max(1, Math.ceil(solo.bosses.length / 3))
+const bossBarsBottom = () => BOSS_BARS_TOP() + bossRows() * BOSS_ROW_H()
+
+const BossBars = () => {
+  const n = solo.bosses.length
+  const perRow = Math.min(3, Math.max(1, n))
+  const w = perRow === 1 ? HS(300) : perRow === 2 ? HS(210) : HS(170)
+  const h = HS(14)
+  const gap = HS(8)
+  const rowW = perRow * w + (perRow - 1) * gap
+  return (
+    <UiEntity
+      uiTransform={{
+        positionType: 'absolute',
+        position: { top: BOSS_BARS_TOP(), left: '50%' },
+        margin: { left: -Math.round(rowW / 2) },
+        width: rowW,
+        height: bossRows() * BOSS_ROW_H(),
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        pointerFilter: 'none'
+      }}
+    >
+      {solo.bosses.map((boss, i) => {
+        const frac = Math.max(0, boss.hp / boss.maxHp)
+        return (
+          <UiEntity
+            key={`bossbar-${i}`}
+            uiTransform={{ width: w, height: BOSS_ROW_H(), margin: { right: i % 3 === perRow - 1 ? 0 : gap }, flexDirection: 'column', pointerFilter: 'none' }}
+          >
+            <Label
+              value={boss.name.toUpperCase()}
+              fontSize={HS(13)}
+              color={boss.hp > 0 ? WHITE : Color4.create(0.6, 0.6, 0.65, 1)}
+              textAlign="middle-left"
+              textWrap="nowrap"
+              uiTransform={{ width: '100%', height: HS(18) }}
+            />
+            <UiEntity
+              uiTransform={{ width: w, height: h, borderRadius: Math.round(h / 2), borderWidth: 2, borderColor: DANGER_EDGE, pointerFilter: 'none' }}
+              uiBackground={{ color: Color4.create(0.08, 0.02, 0.1, 0.9) }}
+            >
+              <UiEntity
+                uiTransform={{ width: Math.max(0, Math.round((w - 4) * frac)), height: h - 4, borderRadius: Math.round((h - 4) / 2), pointerFilter: 'none' }}
+                uiBackground={{ color: Color4.create(0.75, 0.1, 0.25, 1) }}
+              />
+            </UiEntity>
+          </UiEntity>
+        )
+      })}
+    </UiEntity>
+  )
+}
+
+const EndButton = (props: { id: string; label: string; onPress: () => void; primary?: boolean }) => (
+  <PopButton
+    id={props.id}
+    width={S(210)}
+    height={S(50)}
+    radius={S(25)}
+    label={props.label}
+    font={S(20)}
+    bg={props.primary ? ORANGE : PANEL_BG}
+    labelColor={props.primary ? Color4.Black() : WHITE}
+    borderColor={EDGE}
+    onPress={props.onPress}
+    slot={{ margin: { left: S(8), right: S(8) } }}
+  />
+)
+
+const SoloEndCard = () => {
+  if (solo.phase === 'fight' || solo.victory || parryFeedback.eliminatedNotice()) return null // the "you died" and victory shots play first
+  const won = solo.phase === 'won'
+  const finalWin = won && solo.level >= solo.levelCount
+  const w = S(560)
+  const h = S(230)
+  const title = finalWin ? 'ALL FIVE LEVELS CLEARED' : won ? `LEVEL ${solo.level} CLEARED` : solo.bosses.length > 1 ? 'THEY WIN' : 'YOU WERE DEFEATED'
+  const subtitle = finalWin ? 'The Vampire Master kneels' : won ? 'Next up: get ready' : 'Three hearts is all you get'
+  return (
+    <UiEntity
+      uiTransform={{
+        positionType: 'absolute',
+        position: { top: '28%', left: '50%' },
+        margin: { left: -Math.round(w / 2) },
+        width: w,
+        height: h,
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        borderRadius: S(18),
+        borderWidth: 3,
+        borderColor: won ? GOLD : DANGER_EDGE,
+        pointerFilter: 'block'
+      }}
+      uiBackground={{ color: PANEL_BG }}
+    >
+      <Label value={title} fontSize={S(30)} color={won ? GOLD : RED} textAlign="middle-center" uiTransform={{ width: '100%', height: S(44) }} />
+      <Label value={subtitle} fontSize={S(18)} color={WHITE} textAlign="middle-center" uiTransform={{ width: '100%', height: S(30), margin: { bottom: S(18) } }} />
+      <UiEntity uiTransform={{ flexDirection: 'row', justifyContent: 'center', width: '100%', height: S(50) }}>
+        {won ? (
+          <EndButton id="solo-next" label={finalWin ? 'Play again' : 'Next level'} primary onPress={nextSoloLevel} />
+        ) : (
+          <EndButton id="solo-retry" label="Try again" primary onPress={retrySolo} />
+        )}
+        <EndButton id="solo-leave" label="Leave the ring" onPress={leaveSolo} />
+      </UiEntity>
+    </UiEntity>
+  )
+}
+
+/** Testing only (SOLO_LEVEL_SELECT in config.ts): buttons to jump straight to a level. */
+const LevelSelect = () => {
+  if (!SOLO_LEVEL_SELECT) return null
+  const w = S(46)
+  const gap = S(6)
+  const levels = []
+  for (let i = 1; i <= solo.levelCount; i++) {
+    levels.push(
+      <PopButton
+        key={`lvl-${i}`}
+        id={`lvl-${i}`}
+        width={w}
+        height={w}
+        radius={Math.round(w / 2)}
+        label={`${i}`}
+        font={S(20)}
+        bg={solo.level === i ? ORANGE : PANEL_BG}
+        labelColor={solo.level === i ? Color4.Black() : WHITE}
+        borderColor={EDGE}
+        onPress={() => jumpToLevel(i)}
+        slot={{ margin: { left: gap } }}
+      />
+    )
+  }
+  return (
+    <UiEntity
+      uiTransform={{
+        positionType: 'absolute',
+        position: { bottom: S(24), left: S(24) },
+        flexDirection: 'row',
+        alignItems: 'center',
+        height: w
+      }}
+    >
+      <PopButton
+        id="solo-kill"
+        width={S(70)}
+        height={S(46)}
+        radius={S(23)}
+        label="KILL 1"
+        font={S(16)}
+        bg={Color4.create(0.5, 0.05, 0.1, 0.95)}
+        labelColor={WHITE}
+        borderColor={DANGER_EDGE}
+        onPress={killOneBoss}
+        slot={{ margin: { right: S(14) } }}
+      />
+      <Label value="TEST LEVEL" fontSize={S(14)} color={Color4.create(1, 1, 1, 0.6)} textAlign="middle-left" textWrap="nowrap" uiTransform={{ width: S(96), height: S(20) }} />
+      {levels}
+    </UiEntity>
+  )
+}
+
+/** The title that fades in over the level intro camera. */
+const IntroTitle = () => {
+  if (!solo.intro) return null
+  const fadeIn = clamp01(solo.introAge / 0.6)
+  const fadeOut = 1 - clamp01((solo.introAge - (solo.introDur - 0.7)) / 0.7)
+  const a = fadeIn * fadeOut
+  return (
+    <UiEntity
+      uiTransform={{ positionType: 'absolute', position: { top: '12%', left: 0 }, width: '100%', height: S(120), flexDirection: 'column', alignItems: 'center', pointerFilter: 'none' }}
+    >
+      <Label value={`LEVEL ${solo.level}`} fontSize={S(58)} color={Color4.create(GOLD.r, GOLD.g, GOLD.b, a)} textAlign="middle-center" uiTransform={{ width: '100%', height: S(70) }} />
+      <Label value={solo.levelName.toUpperCase()} fontSize={S(28)} color={Color4.create(1, 1, 1, a)} textAlign="middle-center" uiTransform={{ width: '100%', height: S(40) }} />
+    </UiEntity>
+  )
+}
+
+const SoloHud = () => {
+  const fb = parryFeedback.current()
+  const elim = parryFeedback.eliminatedNotice()
+  soundButtonShown = false
+  soundPanel.open = false
+  return (
+    <UiEntity uiTransform={{ width: '100%', height: '100%' }}>
+      <StatusBanner text={`LEVEL ${solo.level}  -  ${solo.levelName.toUpperCase()}`} tone="normal" />
+      <BossBars />
+      <Hearts hp={solo.hp} top={bossBarsBottom() + HS(6)} />
+      {fb && <FeedbackPop text={fb} age={parryFeedback.age()} top={bossBarsBottom() + HS(6) + HS(46) + HS(8)} />}
+      {elim && <EliminatedSplash detail={elim.detail} age={elim.age} />}
+      {solo.phase === 'fight' && !solo.intro && !isMobile() && <ParryButton />}
+      <SoloEndCard />
+      {solo.victory && <WinnerImage round={solo.victoryId} />}
+      <IntroTitle />
+      <LevelSelect />
+      {!isServerAlive() && (
+        <Label
+          value="Server connection lost - your run continues"
+          fontSize={S(15)}
+          color={Color4.create(1, 0.8, 0.3, 1)}
+          textAlign="middle-center"
+          uiTransform={{ positionType: 'absolute', position: { bottom: S(8), left: 0 }, width: '100%', height: S(22) }}
+        />
+      )}
+    </UiEntity>
+  )
+}
+
+// ---- The lobby Vampire's conversation ----
+
+const VampireDialog = () => {
+  if (!vampireDialog.open) return null
+  const lines = vampireLines()
+  const line = lines[Math.min(vampireDialog.line, lines.length - 1)]
+  const last = vampireDialog.line >= lines.length - 1
+  const unlocked = Math.min(LEVELS.length, solo.cleared + 1)
+  const picker = last && vampireDialog.mode !== 'intro' // returning players choose a level
+  const w = Math.min(S(760), Math.round(virtualCanvas().w * 0.9))
+  const font = S(19)
+  const textW = w - S(48)
+  const textLines = Math.max(1, Math.ceil(estW(line, font) / textW))
+  const textH = Math.round(textLines * font * 1.35)
+  const pickerH = picker ? S(30) + S(56) : 0
+  const h = S(40) + textH + S(24) + S(50) + S(20) + pickerH
+  const levelButtons = []
+  if (picker) {
+    for (let i = 1; i <= unlocked; i++) {
+      levelButtons.push(
+        <PopButton
+          key={`vlvl-${i}`}
+          id={`vlvl-${i}`}
+          width={S(50)}
+          height={S(50)}
+          radius={S(25)}
+          label={`${i}`}
+          font={S(22)}
+          bg={i === unlocked && solo.cleared < LEVELS.length ? ORANGE : PANEL_BG}
+          labelColor={i === unlocked && solo.cleared < LEVELS.length ? Color4.Black() : WHITE}
+          borderColor={EDGE}
+          onPress={() => acceptVampireFight(i)}
+          slot={{ margin: { left: S(6), right: S(6) } }}
+        />
+      )
+    }
+  }
+  return (
+    <UiEntity
+      uiTransform={{
+        positionType: 'absolute',
+        position: { bottom: S(50), left: '50%' },
+        margin: { left: -Math.round(w / 2) },
+        width: w,
+        height: h,
+        flexDirection: 'column',
+        alignItems: 'center',
+        padding: { top: S(14), left: S(24), right: S(24) },
+        borderRadius: S(18),
+        borderWidth: 3,
+        borderColor: EDGE,
+        pointerFilter: 'block'
+      }}
+      uiBackground={{ color: PANEL_BG }}
+    >
+      <Label value="THE VAMPIRE" fontSize={S(20)} color={GOLD} textAlign="middle-left" uiTransform={{ width: '100%', height: S(30) }} />
+      <Label value={line} fontSize={font} color={WHITE} textAlign="top-left" textWrap="wrap" uiTransform={{ width: textW, height: textH + S(10) }} />
+      {picker && (
+        <UiEntity uiTransform={{ flexDirection: 'column', alignItems: 'center', width: '100%', height: pickerH }}>
+          <Label value="CHOOSE YOUR FIGHT" fontSize={S(14)} color={Color4.create(1, 1, 1, 0.65)} textAlign="middle-center" uiTransform={{ width: '100%', height: S(26) }} />
+          <UiEntity uiTransform={{ flexDirection: 'row', justifyContent: 'center', width: '100%', height: S(52) }}>{levelButtons}</UiEntity>
+        </UiEntity>
+      )}
+      <UiEntity uiTransform={{ flexDirection: 'row', justifyContent: 'flex-end', width: '100%', height: S(50), margin: { top: S(12) } }}>
+        {last ? (
+          <UiEntity uiTransform={{ flexDirection: 'row' }}>
+            <EndButton id="vamp-no" label="Not now" onPress={closeVampireDialog} />
+            {!picker && <EndButton id="vamp-yes" label="Fight!" primary onPress={() => acceptVampireFight(1)} />}
+          </UiEntity>
+        ) : (
+          <UiEntity uiTransform={{ flexDirection: 'row' }}>
+            <EndButton id="vamp-leave" label="Leave" onPress={closeVampireDialog} />
+            <EndButton id="vamp-next" label="Next" primary onPress={() => {
+                vampireDialog.line += 1
+                playSfx(VAMPIRE_VOICE_SFX, 0.9)
+              }} />
+          </UiEntity>
+        )}
+      </UiEntity>
+    </UiEntity>
+  )
+}
+
 const Hud = () => {
   const L = layout()
+  // A solo run is local: if the server's heartbeat drops, the fight carries on and keeps its HUD (with a small notice)
+  if (solo.active) return <SoloHud />
   if (!isServerAlive()) {
     return (
       <UiEntity uiTransform={{ width: '100%', height: '100%' }}>
@@ -1200,6 +1504,7 @@ const Root = () => (
   <UiEntity uiTransform={{ width: '100%', height: '100%' }}>
     <Preload />
     <Hud />
+    <VampireDialog />
   </UiEntity>
 )
 

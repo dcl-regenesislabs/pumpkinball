@@ -6,6 +6,7 @@ import { findAvatar } from './avatars'
 import { EVIL_LAUGH_SFX, msSincePlayed, playSfx, WIN_SFX } from './sfx'
 import { ARENA_CENTER, Phase, WINNER_CAMERA, WINNER_DANCE_EMOTE, WINNER_SECONDS } from '../shared/config'
 import { GameState } from '../shared/schemas'
+import { solo } from './soloState'
 
 /**
  * When a match has a winner: the winner dances, and every player's camera swings to them and orbits around
@@ -66,6 +67,12 @@ export function setupWinnerCinematic() {
   }
 
   engine.addSystem((dt: number) => {
+    if (solo.active) {
+      // Someone else's match ended while this player is in their own run: no camera takeover
+      stop()
+      unfreeze()
+      return
+    }
     let phase = ''
     let winnerId = ''
     let serverPos: Vector3 | undefined

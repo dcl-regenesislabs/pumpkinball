@@ -12,6 +12,10 @@ export const BOO_SFX = 'assets/sounds/BOO.wav'
 export const HOVER_SFX = 'assets/sounds/hover.wav'
 export const CLOCK_TICK_SFX = 'assets/sounds/ClockTick.wav'
 export const START_GO_SFX = 'assets/sounds/StartGo.wav'
+export const PUMPKIN_CAST_SFX = 'assets/sounds/pumpkincast.wav' // a boss charging a pumpkin (2 s)
+export const MAGIC_SPELL_SFX = 'assets/sounds/magicspell.wav' // a spell that is not a pumpkin: green orbs (0.9 s)
+export const MAGIC_SPELL2_SFX = 'assets/sounds/magicspell2.wav' // a shorter one: floor circles, each orb as it leaves (0.5 s)
+export const VAMPIRE_VOICE_SFX = 'assets/sounds/vampirevoice.wav' // the Vampire speaking (0.5 s)
 
 /**
  * One-shot sound effects, clients only (same pattern as the Marsh Colony UI click: a lazily created AudioSource entity
@@ -63,7 +67,7 @@ export function playSfxAt(src: string, at: Vector3, volume = 0.8): void {
  * before the first time they are needed. Without this the first swing / hit / teleport can lag or drop.
  */
 export function preloadSfx(): void {
-  const flat = [SWING_SFX, BAT_HIT_SFX, HURT_SFX, TELEPORT_SFX, EVIL_LAUGH_SFX, WIN_SFX, BOO_SFX, CLOCK_TICK_SFX, START_GO_SFX]
+  const flat = [SWING_SFX, BAT_HIT_SFX, HURT_SFX, TELEPORT_SFX, EVIL_LAUGH_SFX, WIN_SFX, BOO_SFX, CLOCK_TICK_SFX, START_GO_SFX, PUMPKIN_CAST_SFX, MAGIC_SPELL_SFX, MAGIC_SPELL2_SFX, VAMPIRE_VOICE_SFX]
   for (const src of flat) {
     if (own.has(src)) continue
     const entity = engine.addEntity()

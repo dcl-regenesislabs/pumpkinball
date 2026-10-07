@@ -9,6 +9,7 @@ import {
   SWORD_SCALE
 } from '../shared/config'
 import { PlayerState } from '../shared/schemas'
+import { isHiddenFromMe } from './soloVisibility'
 
 interface Weapon {
   root: Entity
@@ -59,5 +60,12 @@ export function setupWeapons() {
       console.log('[CLIENT] sword attached to', id)
     }
     for (const id of [...weapons.keys()]) if (!armed.has(id)) removeWeapon(id)
+
+    // A bat stays attached to an avatar that is hidden in the ring (someone else's solo run or match): hide it too
+    for (const [id, w] of weapons) {
+      const s = isHiddenFromMe(id) ? 0 : SWORD_SCALE
+      const t = Transform.getMutable(w.model)
+      if (t.scale.x !== s) t.scale = Vector3.create(s, s, s)
+    }
   })
 }

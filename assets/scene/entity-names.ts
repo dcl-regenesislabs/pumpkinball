@@ -76,4 +76,5 @@ export enum EntityNames {
   Tree02_glb_3 = "Tree02.glb_3",
   Tree02_glb_4 = "Tree02.glb_4",
   Tree02_glb_5 = "Tree02.glb_5",
+  Vampire_glb = "Vampire.glb",
 } 

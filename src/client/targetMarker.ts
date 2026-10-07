@@ -3,6 +3,8 @@ import { Quaternion, Vector3 } from '@dcl/sdk/math'
 import { getPlayer } from '@dcl/sdk/src/players'
 import { RING_CALIBRATION, TARGET_RING_MODEL, TARGET_RING_RADIUS, TARGET_RING_SPIN_DEG_PER_S, TARGET_RING_UNITY_OFFSET_Y } from '../shared/config'
 import { PlayerState, Pumpkin } from '../shared/schemas'
+import { soloPumpkinTargetsMe } from './solo'
+import { solo } from './soloState'
 import { parryFeedback } from './feedback'
 import { isBevy, isMobile } from './platform'
 
@@ -79,6 +81,9 @@ export function setupTargetMarker() {
 
     let targetId = ''
     for (const [, p] of engine.getEntitiesWith(Pumpkin)) targetId = p.active ? p.targetId : ''
+
+    // In a solo run only the Vampire's pumpkin counts (another match's target would be hidden from us anyway)
+    if (solo.active) targetId = soloPumpkinTargetsMe() ? (getPlayer()?.userId?.toLowerCase() ?? '') : ''
 
     // While calibrating, your own ring is always shown, so you can tune it without a round running
     if (RING_CALIBRATION && !isMobile() && !isBevy()) targetId = getPlayer()?.userId?.toLowerCase() ?? targetId

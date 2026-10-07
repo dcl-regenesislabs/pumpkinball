@@ -4,6 +4,7 @@ import { Phase } from '../shared/config'
 import { room } from '../shared/messages'
 import { GameState } from '../shared/schemas'
 import { isMobile } from './platform'
+import { solo } from './soloState'
 import { isServerAlive } from './serverReadiness'
 
 export const LOBBY_MUSIC = 'assets/sounds/lobby-music.mp3'
@@ -134,7 +135,7 @@ export function setupMusic() {
   engine.addSystem((dt: number) => {
     let phase: string = Phase.Lobby
     for (const [, s] of engine.getEntitiesWith(GameState)) phase = s.phase
-    const fighting = phase === Phase.Starting || phase === Phase.Round
+    const fighting = phase === Phase.Starting || phase === Phase.Round || solo.active // a solo run gets the arena music too
     const wanted = fighting ? ARENA_MUSIC : LOBBY_MUSIC
 
     // into the arena track fast, so it is already playing as the 3-2-1 begins (that phase only lasts a few seconds)

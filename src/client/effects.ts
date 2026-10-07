@@ -33,7 +33,7 @@ const PALETTE: Record<Kind, Color4[]> = {
   lava: [Color4.create(0.15, 1, 0.05, 1), Color4.create(0.35, 1, 0.12, 1)] // saturated neon green (kept away from white so the glow doesn't wash out)
 }
 const GLOW: Record<Kind, number> = { trail: 2.2, splash: 2.2, parry: 2.2, lava: 1.0 } // lava is much lower: above ~1.5 the green clips to white
-const POOL_SIZE: Record<Kind, number> = { trail: 48, splash: 40, parry: 44, lava: 120 }
+const POOL_SIZE: Record<Kind, number> = { trail: 72, splash: 40, parry: 64, lava: 120 }
 
 const pools: Record<Kind, Bubble[]> = { trail: [], splash: [], parry: [], lava: [] }
 const cursor: Record<Kind, number> = { trail: 0, splash: 0, parry: 0, lava: 0 }
@@ -360,6 +360,120 @@ export function parryBurst(at: Vector3) {
   }
 }
 
+
+// ---- Special attacks: a purple bubble for a projectile's own trail, a green one for decoys, and a floor blast ----
+
+/** One trail bubble at a spot (each projectile spaces its own, so several can fly at once). */
+export function trailBubble(at: Vector3) {
+  spawn(
+    'trail',
+    Vector3.create(at.x + rand(-0.18, 0.18), at.y + rand(-0.18, 0.18), at.z + rand(-0.18, 0.18)),
+    Vector3.create(rand(-0.3, 0.3), rand(0.2, 0.7), rand(-0.3, 0.3)),
+    rand(0.45, 0.8),
+    rand(0.14, 0.26)
+  )
+}
+
+/** Green sparks behind a decoy orb. */
+export function decoyTrail(at: Vector3) {
+  for (let i = 0; i < 2; i++) {
+    spawn(
+      'lava',
+      Vector3.create(at.x + rand(-0.2, 0.2), at.y + rand(-0.2, 0.2), at.z + rand(-0.2, 0.2)),
+      Vector3.create(rand(-0.4, 0.4), rand(0.2, 0.9), rand(-0.4, 0.4)),
+      rand(0.35, 0.6),
+      rand(0.12, 0.22)
+    )
+  }
+}
+
+/** A floor blast: a ring of red and orange blobs races out to `radius`, with embers thrown up. */
+export function blastFx(at: Vector3, radius: number) {
+  const ring = 36
+  for (let i = 0; i < ring; i++) {
+    const a = (i / ring) * Math.PI * 2
+    const speed = (radius * rand(0.85, 1.05)) / 0.3 // reaches the edge in about 0.3 s
+    spawn(
+      i % 2 === 0 ? 'splash' : 'parry',
+      Vector3.create(at.x, at.y + 0.2, at.z),
+      Vector3.create(Math.cos(a) * speed, rand(0, 0.8), Math.sin(a) * speed),
+      rand(0.3, 0.45),
+      rand(0.22, 0.34),
+      0,
+      2.5
+    )
+  }
+  for (let i = 0; i < 26; i++) {
+    const a = rand(0, Math.PI * 2)
+    const r = rand(0, radius * 0.8)
+    spawn(
+      i % 3 === 0 ? 'lava' : 'splash',
+      Vector3.create(at.x + Math.cos(a) * r, at.y + 0.2, at.z + Math.sin(a) * r),
+      Vector3.create(Math.cos(a) * rand(0, 1.5), rand(4, 8), Math.sin(a) * rand(0, 1.5)),
+      rand(0.6, 1.1),
+      rand(0.18, 0.4),
+      10
+    )
+  }
+}
+
+// ---- Charging energy: motes appear around a point and stream into it (the Vampire powering up the pumpkin) ----
+
+let chargeCarry = 0
+
+/** Call every frame while charging. `power` 0..1 raises the rate; motes shrink away as they reach the centre. */
+export function chargeFx(center: Vector3, dt: number, power: number) {
+  chargeCarry += dt * (40 + 90 * power)
+  while (chargeCarry >= 1) {
+    chargeCarry -= 1
+    // a random direction on a sphere
+    const y = rand(-1, 1)
+    const a = rand(0, Math.PI * 2)
+    const flat = Math.sqrt(1 - y * y)
+    const dir = Vector3.create(Math.cos(a) * flat, y, Math.sin(a) * flat)
+    const r = rand(1.6, 2.8)
+    const life = rand(0.35, 0.55)
+    spawn(
+      Math.random() < 0.55 ? 'trail' : 'parry', // purple and orange energy
+      Vector3.create(center.x + dir.x * r, center.y + dir.y * r, center.z + dir.z * r),
+      Vector3.create((-dir.x * r) / life, (-dir.y * r) / life, (-dir.z * r) / life), // arrives at the centre as it ends
+      life,
+      rand(0.1, 0.2) * (0.8 + 0.5 * power)
+    )
+  }
+}
+
+// ---- Spawn: a boss (or a solo player) appears. Teleport beam + rings, a purple shockwave, rising green sparks, red embers ----
+
+export function spawnFx(at: Vector3, big = true) {
+  teleportFx(at)
+  const count = big ? 30 : 16
+  for (let i = 0; i < count; i++) {
+    const angle = (i / count) * Math.PI * 2
+    const speed = rand(5, 8)
+    spawn(
+      'trail',
+      Vector3.create(at.x, at.y + 0.15, at.z),
+      Vector3.create(Math.cos(angle) * speed, rand(0, 0.6), Math.sin(angle) * speed),
+      rand(0.5, 0.8),
+      rand(0.16, 0.26),
+      0,
+      4 // drag: the ring races out and stops
+    )
+  }
+  for (let i = 0; i < count; i++) {
+    const angle = rand(0, Math.PI * 2)
+    const r = rand(0.2, big ? 1.2 : 0.6)
+    spawn(
+      i % 3 === 0 ? 'splash' : 'lava', // green sparks with a few red embers
+      Vector3.create(at.x + Math.cos(angle) * r, at.y + 0.1, at.z + Math.sin(angle) * r),
+      Vector3.create(Math.cos(angle) * rand(0.2, 0.8), rand(2.5, big ? 6.5 : 4), Math.sin(angle) * rand(0.2, 0.8)),
+      rand(0.7, 1.3),
+      rand(0.1, 0.22),
+      -0.8 // slight lift, like rising embers
+    )
+  }
+}
 
 // ---- Lava: glowing green bubbles that rise from the lava surface and pop ----
 

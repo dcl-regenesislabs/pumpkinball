@@ -2,10 +2,10 @@
   "ecs7": true,
   "runtimeVersion": "7",
   "display": {
-    "title": "Don't Catch It!",
-    "description": "Pumpkin dodgeball. Parry the pumpkin or be eliminated.",
+    "title": "Pumpkin Ball!",
+    "description": "Pumpkin dodgeball. Parry the pumpkin or be eliminated. Defeat powerful foes",
     "favicon": "favicon_asset",
-    "navmapThumbnail": "assets/images/Dont Catch It Thumbnail.png"
+    "navmapThumbnail": "assets/images/Pumpkin Ball Graveyard Showdown.png"
   },
   "owner": "",
   "contact": {
@@ -160,7 +160,7 @@
     "projectId": "5a1f3a57-21ae-405d-8b16-e2a70fe5300b"
   },
   "worldConfiguration": {
-    "name": "pepino.dcl.eth"
+    "name": "pumpkinball.dcl.eth"
   },
   "rating": "A"
 }

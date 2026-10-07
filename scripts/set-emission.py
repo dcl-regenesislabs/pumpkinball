@@ -5,6 +5,8 @@ Gives a GLB's materials a glow of their own colour (glTF "emissiveFactor"), with
     python3 scripts/set-emission.py assets/models/pumpkin.glb 0.1
 
 - Materials with a plain base colour glow in that colour, at the given strength (0.1 = 10% of the colour).
+- Materials with a base colour TEXTURE (and no emissive texture) glow in that texture's colours: the base texture is also used
+  as the emissive texture, so the glow follows the painted colours instead of lifting everything to grey.
 - Materials that already have an emissive texture keep it; their factor is set to the strength.
 Re-exporting from Blender resets this, so run it again afterwards (or set Emission in Blender instead).
 Higher strength = brighter glow: 0.1 is subtle, 0.3 is clearly self-lit, 1.0 is fully glowing.
@@ -30,7 +32,11 @@ def main():
 
     for m in doc['materials']:
         pbr = m.get('pbrMetallicRoughness', {})
+        base_tex = pbr.get('baseColorTexture')
         if m.get('emissiveTexture'):
+            m['emissiveFactor'] = [strength] * 3
+        elif base_tex:
+            m['emissiveTexture'] = {'index': base_tex['index']}
             m['emissiveFactor'] = [strength] * 3
         else:
             base = pbr.get('baseColorFactor', [1, 1, 1, 1])
