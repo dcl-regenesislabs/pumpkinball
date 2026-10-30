@@ -67,7 +67,7 @@ import { blastFx, chargeFx, decoyTrail, flightPuff, parryBurst, spawnFx, splash,
 import { faceCameraAfter } from './cameraFace'
 import { parryFeedback } from './feedback'
 import { incoming } from './incoming'
-import { heldClick, swing } from './parry'
+import { swing } from './parry'
 import { BAT_HIT_SFX, EVIL_LAUGH_SFX, HURT_SFX, MAGIC_SPELL2_SFX, MAGIC_SPELL_SFX, playSfx, playSfxAt, PUMPKIN_CAST_SFX, SWING_SFX, WIN_SFX } from './sfx'
 import { hooks, solo } from './soloState'
 
@@ -1349,8 +1349,7 @@ function updateProj(p: Proj, dt: number) {
       if (p.arrivedAt === 0 && Vector3.distance(p.pos, aim) <= PUMPKIN_CONTACT_RADIUS) p.arrivedAt = Date.now()
       if (p.arrivedAt > 0) {
         if (swing.live()) parry(p)
-        else if (Date.now() - p.arrivedAt >= PARRY_LATE_GRACE_S * 1000 && !heldClick.mightSwingBy(p.arrivedAt + PARRY_LATE_GRACE_S * 1000)) {
-          // (a click held since before then may still be a swing: wait for it)
+        else if (Date.now() - p.arrivedAt >= PARRY_LATE_GRACE_S * 1000) {
           const at = Vector3.clone(p.pos)
           finishProj(p)
           incoming.resolve('miss')

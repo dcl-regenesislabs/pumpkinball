@@ -1,11 +1,10 @@
-import { engine, GltfContainer, InputAction, inputSystem, PointerEventType, PointerLock, Transform } from '@dcl/sdk/ecs'
+import { engine, GltfContainer, InputAction, inputSystem, PointerEventType, Transform } from '@dcl/sdk/ecs'
 import { getPlayer } from '@dcl/sdk/src/players'
 import { Color4, Quaternion, Vector3 } from '@dcl/sdk/math'
 import { movePlayerTo } from '~system/RestrictedActions'
 import {
   LAVA_SURFACE_Y,
   PARRY_LATE_GRACE_S,
-  PARRY_SWING_MS,
   PERFECT_PARRY_SPEED_MULT,
   PUMPKIN_AIM_HEIGHT,
   PUMPKIN_CONTACT_RADIUS,
@@ -22,7 +21,7 @@ import { setupCameraLock } from './cameraLock'
 import { inCombat, setupControls } from './controls'
 import { parryFeedback } from './feedback'
 import { incoming } from './incoming'
-import { heldClick, requestParry, sinceLastPress, swing, updateParryFeedback } from './parry'
+import { requestParry, sinceLastPress, swing, updateParryFeedback } from './parry'
 import { debug } from './debug'
 import { bloodSplat, setupBlood } from './blood'
 import { teleportFx, lavaSplash, parryBurst, setupEffects, setupLavaBubbles, setupLavaFlow, splash, trail, trailReset } from './effects'
@@ -48,8 +47,6 @@ import { setupSolo } from './solo'
 import { solo } from './soloState'
 import { setupSoloVisibility } from './soloVisibility'
 import { setupVampire } from './vampire'
-
-const CLICK_DRAG_DEG = 2 // a held free-cursor click that turns the camera more than this is a camera drag, not a swing
 
 export function initClient() {
   preloadSfx()
@@ -102,41 +99,9 @@ export function initClient() {
   })
   // Left click swings too, on desktop, once a game has started (a match or a solo run). Not in the lobby, so clicking
   // things there (the Vampire, dialogs) never swings, and not during the level intro or after a level ends.
-  // With the cursor locked (the mouse steers the camera) a click swings at once, like E. With a free cursor, holding the button
-  // and dragging turns the camera: the click swings only when released within the swing window without the camera turning,
-  // counted from the press (see heldClick in parry.ts). A click that locks the cursor doesn't swing.
-  let downRotation: Quaternion | undefined // the camera's rotation when the held click went down
   engine.addSystem(() => {
-    const down = inputSystem.isTriggered(InputAction.IA_POINTER, PointerEventType.PET_DOWN)
-    const up = inputSystem.isTriggered(InputAction.IA_POINTER, PointerEventType.PET_UP)
-    if (isMobile() || !inCombat() || solo.intro || (solo.active && solo.phase !== 'fight')) {
-      heldClick.cancel()
-      return
-    }
-    const lock = PointerLock.getOrNull(engine.CameraEntity)
-    const locked = lock ? lock.isPointerLocked : true // a client that doesn't report it keeps the old behaviour: swing at once
-    const camera = Transform.getOrNull(engine.CameraEntity)?.rotation
-
-    if (down) {
-      if (locked) requestParry()
-      else {
-        heldClick.down()
-        downRotation = camera ? Quaternion.create(camera.x, camera.y, camera.z, camera.w) : undefined
-        debug.press = 'click: held (free cursor)'
-      }
-    }
-    const held = heldClick.heldMs()
-    if (held === undefined) return
-    const turned = camera && downRotation ? Quaternion.angle(downRotation, camera) : 0
-    if (locked || turned > CLICK_DRAG_DEG) {
-      heldClick.cancel()
-      debug.press = locked ? 'click: locked the cursor, no swing' : `click: camera drag (${turned.toFixed(1)} deg), no swing`
-    } else if (held > PARRY_SWING_MS) {
-      heldClick.cancel()
-      debug.press = `click: held ${held}ms, no swing`
-    } else if (up || (!down && !inputSystem.isPressed(InputAction.IA_POINTER))) {
-      heldClick.release()
-    }
+    if (isMobile() || !inCombat() || solo.intro || (solo.active && solo.phase !== 'fight')) return
+    if (inputSystem.isTriggered(InputAction.IA_POINTER, PointerEventType.PET_DOWN)) requestParry()
   })
 
   room.onMessage('resolveResult', (d) => {
@@ -330,8 +295,8 @@ function setupPumpkin() {
         const grade = swing.grade(arrivedAt)
         swing.consume()
         report('parry', me, grade === 'perfect')
-      } else if (Date.now() - arrivedAt >= PARRY_LATE_GRACE_S * 1000 && !heldClick.mightSwingBy(arrivedAt + PARRY_LATE_GRACE_S * 1000)) {
-        report('hit', me) // (a click held since before then may still be a swing: wait for it)
+      } else if (Date.now() - arrivedAt >= PARRY_LATE_GRACE_S * 1000) {
+        report('hit', me)
       }
     }
 

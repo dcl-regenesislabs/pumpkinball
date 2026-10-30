@@ -26,7 +26,6 @@ let missPending = false
 let lobbySwingAt = -Infinity
 let buffered = false // a press made just before the cooldown ended
 let swungOnce = false
-let clickDownAt = 0 // a free-cursor left click still held: it may become a swing or a camera drag (0 = none)
 
 /** True once the player has swung the bat this session: the "how to swing" tips stop showing. */
 export const hasSwung = () => swungOnce
@@ -57,8 +56,8 @@ export const swing = {
   }
 }
 
-function press(at = Date.now()) {
-  startedAt = at
+function press() {
+  startedAt = Date.now()
   cooldownFrom = startedAt
   swingSpent = false
   missPending = true
@@ -83,45 +82,16 @@ function lobbySwing() {
   swingAtDummies()
 }
 
-/**
- * Used by the E key and the on-screen buttons. A real parry in a round; a fun swing in the lobby.
- * `at`: when the press really happened (a held click is only known to be a swing once released, see heldClick).
- */
-export function requestParry(at = Date.now()) {
+/** Used by the E key and the on-screen buttons. A real parry in a round; a fun swing in the lobby. */
+export function requestParry() {
   swungOnce = true
   if (!inCombat()) return lobbySwing()
-  if (at - cooldownFrom >= PARRY_COOLDOWN_MS) return press(at)
+  if (parryCooldown.ready()) return press()
 
   // Cooldown still running: remember a press made right before it ends, drop the rest.
-  const left = PARRY_COOLDOWN_MS - (at - cooldownFrom)
+  const left = PARRY_COOLDOWN_MS - (Date.now() - cooldownFrom)
   buffered = left <= PARRY_BUFFER_MS
   debug.press = buffered ? `press: buffered (${Math.round(left)}ms left)` : `press: IGNORED, cooldown ${Math.round(left)}ms left`
-}
-
-/**
- * A left click with a free cursor. Holding it and dragging turns the camera, so it only becomes a swing once released without the
- * camera turning (setup.ts watches it). The swing is dated back to the press, and the pumpkin's referee waits for a click held at
- * contact before calling a hit, so timing a parry with a click works the same as with E, however long the button was down.
- */
-export const heldClick = {
-  down() {
-    clickDownAt = Date.now()
-  },
-  /** It was a camera drag (or held too long): no swing. */
-  cancel() {
-    clickDownAt = 0
-  },
-  /** Released as a click: swing, counted from the press. */
-  release() {
-    if (!clickDownAt) return
-    const at = clickDownAt
-    clickDownAt = 0
-    requestParry(at)
-  },
-  /** ms the click has been held; undefined when there is none. */
-  heldMs: () => (clickDownAt ? Date.now() - clickDownAt : undefined),
-  /** A held click that went down by `deadline` (ms) could still become a swing in time: the referee waits for it. */
-  mightSwingBy: (deadline: number) => clickDownAt > 0 && clickDownAt <= deadline
 }
 
 /** Call every frame: tells the player when a swing expired without connecting. */
