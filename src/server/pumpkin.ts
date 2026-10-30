@@ -6,6 +6,7 @@ import {
   PUMPKIN_AIM_HEIGHT,
   PUMPKIN_HIT_RADIUS,
   PUMPKIN_LAUNCH_DELAY,
+  PUMPKIN_MAX_SPEED,
   PERFECT_PARRY_SPEED_MULT,
   SERVER_FALLBACK_S,
   SERVER_PLAUSIBLE_S
@@ -125,7 +126,8 @@ export function createPumpkin(deps: PumpkinDeps) {
       if (!active || flightSeq !== seq || target !== address || hoverLeft > 0) return 'stale'
 
       const aim = aimAt(address) ?? pos
-      const secondsToImpact = Math.max(0, Vector3.distance(pos, aim) - PUMPKIN_HIT_RADIUS) / (pumpkinSpeed(level, flightT) * boost)
+      const speed = Math.min(pumpkinSpeed(level, flightT) * boost, PUMPKIN_MAX_SPEED) // capped like stepPumpkin
+      const secondsToImpact = Math.max(0, Vector3.distance(pos, aim) - PUMPKIN_HIT_RADIUS) / speed
       if (secondsToImpact > SERVER_PLAUSIBLE_S) return 'implausible'
 
       // Trust the reported start point only if it is near where the server sees the player.
