@@ -32,17 +32,18 @@ export const Messages = {
   parry: Schemas.Map({ seq: Schemas.Int }),
 
   // Client -> server: the pumpkin flight `seq` that targeted me ended. kind is 'parry' or 'hit'.
-  // x/y/z is where the ball was (my chest), so the next flight starts exactly there.
+  // x/y/z is where the ball was (my chest), so the next flight starts exactly there. `perfect`: a parry right on the perfect moment.
   resolve: Schemas.Map({
     seq: Schemas.Int,
     kind: Schemas.String,
+    perfect: Schemas.Boolean,
     x: Schemas.Float,
     y: Schemas.Float,
     z: Schemas.Float
   }),
 
-  // Server -> everyone: that swing connected. Drives the hit flash.
-  parryHit: Schemas.Map({ playerId: Schemas.String }),
+  // Server -> everyone: that swing connected. Drives the hit flash (a bigger one for a perfect parry).
+  parryHit: Schemas.Map({ playerId: Schemas.String, perfect: Schemas.Boolean }),
 
   // Server -> client (to the reporter): was that resolve accepted? Mainly for debugging.
   resolveResult: Schemas.Map({ seq: Schemas.Int, ok: Schemas.Boolean, reason: Schemas.String }),

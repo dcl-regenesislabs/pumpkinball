@@ -34,7 +34,8 @@ export const Pumpkin = engine.defineComponent('dci:Pumpkin', {
   targetId: Schemas.String,
   nextTargetId: Schemas.String, // who gets the ball after a parry/hit on targetId; lets clients continue instantly
   delayMs: Schemas.Int, // hover time before the flight starts
-  level: Schemas.Int // parries so far this chain; with time in flight it sets the speed
+  level: Schemas.Int, // parries so far this chain; with time in flight it sets the speed
+  boost: Schemas.Float // speed multiplier for this flight only: PERFECT_PARRY_SPEED_MULT after a perfect parry, else 1
 })
 
 // Singleton: the top players by match wins, best first. Written by the server only when a round ends.

@@ -6,6 +6,7 @@ import {
   PUMPKIN_AIM_HEIGHT,
   PUMPKIN_HIT_RADIUS,
   PUMPKIN_LAUNCH_DELAY,
+  PERFECT_PARRY_SPEED_MULT,
   SERVER_FALLBACK_S,
   SERVER_PLAUSIBLE_S
 } from '../shared/config'
@@ -29,12 +30,13 @@ const CENTER = Vector3.create(ARENA_CENTER.x, ARENA_CENTER.y + 1.5, ARENA_CENTER
  */
 export function createPumpkin(deps: PumpkinDeps) {
   const entity: Entity = engine.addEntity()
-  Pumpkin.create(entity, { active: false, seq: 0, ox: 0, oy: 0, oz: 0, targetId: '', nextTargetId: '', delayMs: 0, level: 0 })
+  Pumpkin.create(entity, { active: false, seq: 0, ox: 0, oy: 0, oz: 0, targetId: '', nextTargetId: '', delayMs: 0, level: 0, boost: 1 })
   syncEntity(entity, [Pumpkin.componentId], 3)
 
   let active = false
   let seq = 0
   let level = 0 // parries in this chain
+  let boost = 1 // this flight's speed multiplier (a perfect parry sent it)
   let target = ''
   let lastParrier = '' // who last parried it: credited for eliminations that follow ('' = nobody yet)
   let nextTarget = '' // decided in advance and published, so the target's client can continue the rally instantly
@@ -58,11 +60,12 @@ export function createPumpkin(deps: PumpkinDeps) {
   }
 
   /** Starts a new flight from `from` toward a fresh target. One component write per flight. */
-  function launch(from: Vector3, exclude: string | undefined, delayS: number, forced?: string) {
+  function launch(from: Vector3, exclude: string | undefined, delayS: number, forced?: string, speedMult = 1) {
     target = forced ?? pickTarget(exclude)
     if (!target) return stop()
 
     pos = Vector3.clone(from)
+    boost = speedMult
     nextTarget = pickTarget(target)
     hoverLeft = delayS
     flightT = 0
@@ -80,6 +83,7 @@ export function createPumpkin(deps: PumpkinDeps) {
     p.nextTargetId = nextTarget
     p.delayMs = Math.round(delayS * 1000)
     p.level = level
+    p.boost = boost
   }
 
   function stop() {
@@ -88,12 +92,15 @@ export function createPumpkin(deps: PumpkinDeps) {
     Pumpkin.getMutable(entity).active = false
   }
 
-  /** A parry or a hit both keep the rally going: from where the target stands, one level faster, to someone else. */
-  function continueRally(from: Vector3, justHandled: string) {
+  /**
+   * A parry or a hit both keep the rally going: from where the target stands, one level faster, to someone else.
+   * `speedMult` boosts only the flight this starts (a perfect parry).
+   */
+  function continueRally(from: Vector3, justHandled: string, speedMult = 1) {
     level++
     const others = deps.getAlive().filter((a) => a !== justHandled)
     const planned = others.includes(nextTarget) ? nextTarget : undefined // the target clients already expect
-    if (others.length) launch(from, justHandled, 0, planned)
+    if (others.length) launch(from, justHandled, 0, planned, speedMult)
     else if (deps.getAlive().length) launch(CENTER, undefined, 1) // solo test: nobody else to send it to
     else stop()
   }
@@ -112,13 +119,13 @@ export function createPumpkin(deps: PumpkinDeps) {
     /**
      * The target's client says its flight ended in a parry or a hit. Accepted only for the current flight,
      * from its target, and while the server's own ball is plausibly close. `reported` is the ball position
-     * (the target's chest) the next flight should start from.
+     * (the target's chest) the next flight should start from. A `perfect` parry sends the next flight faster.
      */
-    resolve(address: string, flightSeq: number, kind: string, reported: Vector3): 'ok' | 'stale' | 'implausible' {
+    resolve(address: string, flightSeq: number, kind: string, reported: Vector3, perfect: boolean): 'ok' | 'stale' | 'implausible' {
       if (!active || flightSeq !== seq || target !== address || hoverLeft > 0) return 'stale'
 
       const aim = aimAt(address) ?? pos
-      const secondsToImpact = Math.max(0, Vector3.distance(pos, aim) - PUMPKIN_HIT_RADIUS) / pumpkinSpeed(level, flightT)
+      const secondsToImpact = Math.max(0, Vector3.distance(pos, aim) - PUMPKIN_HIT_RADIUS) / (pumpkinSpeed(level, flightT) * boost)
       if (secondsToImpact > SERVER_PLAUSIBLE_S) return 'implausible'
 
       // Trust the reported start point only if it is near where the server sees the player.
@@ -127,7 +134,7 @@ export function createPumpkin(deps: PumpkinDeps) {
 
       if (kind === 'hit') deps.onHit(address)
       else lastParrier = address
-      continueRally(from, address)
+      continueRally(from, address, kind === 'parry' && perfect ? PERFECT_PARRY_SPEED_MULT : 1)
       return 'ok'
     },
 
@@ -149,7 +156,7 @@ export function createPumpkin(deps: PumpkinDeps) {
       flightT += dt
       const aim = aimAt(target)
       if (!aim) return
-      pos = stepPumpkin(pos, aim, level, flightT, dt)
+      pos = stepPumpkin(pos, aim, level, flightT, dt, boost)
 
       if (Vector3.distance(pos, aim) <= PUMPKIN_HIT_RADIUS) {
         arrivedFor += dt

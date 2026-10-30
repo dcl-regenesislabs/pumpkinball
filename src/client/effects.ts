@@ -8,7 +8,7 @@ import { isOnLava, randomLavaPoint } from '../shared/lava'
  * are recycled and animated by one system. Each sphere grows in and shrinks away ("bubbles").
  */
 
-type Kind = 'trail' | 'splash' | 'parry' | 'lava'
+type Kind = 'trail' | 'splash' | 'parry' | 'perfect' | 'lava'
 
 interface Bubble {
   entity: Entity
@@ -30,13 +30,14 @@ const PALETTE: Record<Kind, Color4[]> = {
   trail: [Color4.create(0.6, 0.2, 1, 1), Color4.create(0.82, 0.45, 1, 1)], // purple
   splash: [Color4.create(0.85, 0, 0.02, 1), Color4.create(1, 0.08, 0.05, 1)], // red
   parry: [Color4.create(1, 0.5, 0, 1), Color4.create(1, 0.7, 0.1, 1)], // orange only
+  perfect: [Color4.create(1, 0.85, 0.3, 1), Color4.create(1, 0.97, 0.75, 1)], // gold and near-white: a perfect parry
   lava: [Color4.create(0.15, 1, 0.05, 1), Color4.create(0.35, 1, 0.12, 1)] // saturated neon green (kept away from white so the glow doesn't wash out)
 }
-const GLOW: Record<Kind, number> = { trail: 2.2, splash: 2.2, parry: 2.2, lava: 1.0 } // lava is much lower: above ~1.5 the green clips to white
-const POOL_SIZE: Record<Kind, number> = { trail: 72, splash: 40, parry: 64, lava: 120 }
+const GLOW: Record<Kind, number> = { trail: 2.2, splash: 2.2, parry: 2.2, perfect: 2.6, lava: 1.0 } // lava is much lower: above ~1.5 the green clips to white
+const POOL_SIZE: Record<Kind, number> = { trail: 72, splash: 40, parry: 64, perfect: 40, lava: 120 }
 
-const pools: Record<Kind, Bubble[]> = { trail: [], splash: [], parry: [], lava: [] }
-const cursor: Record<Kind, number> = { trail: 0, splash: 0, parry: 0, lava: 0 }
+const pools: Record<Kind, Bubble[]> = { trail: [], splash: [], parry: [], perfect: [], lava: [] }
+const cursor: Record<Kind, number> = { trail: 0, splash: 0, parry: 0, perfect: 0, lava: 0 }
 
 const rand = (min: number, max: number) => min + Math.random() * (max - min)
 
@@ -205,12 +206,13 @@ export function setupEffects() {
   createPool('trail')
   createPool('splash')
   createPool('parry')
+  createPool('perfect')
   createPool('lava')
   createTeleportSlots()
 
   engine.addSystem((dt: number) => {
     updateTeleportFx(dt)
-    for (const kind of ['trail', 'splash', 'parry', 'lava'] as Kind[]) {
+    for (const kind of ['trail', 'splash', 'parry', 'perfect', 'lava'] as Kind[]) {
       for (const b of pools[kind]) {
         if (!b.active) continue
         b.age += dt
@@ -333,7 +335,33 @@ export function flightPuff(at: Vector3, size = 0.2) {
   }
 }
 
-export function parryBurst(at: Vector3) {
+/** The burst of a landed parry. A perfect one adds a wider, faster ring of gold sparks around it. */
+export function parryBurst(at: Vector3, perfect = false) {
+  if (perfect) {
+    for (let i = 0; i < 28; i++) {
+      const angle = (i / 28) * Math.PI * 2
+      const speed = rand(11, 14)
+      spawn(
+        'perfect',
+        Vector3.create(at.x, at.y, at.z),
+        Vector3.create(Math.cos(angle) * speed, rand(-0.5, 1.5), Math.sin(angle) * speed),
+        rand(0.35, 0.5),
+        rand(0.18, 0.26),
+        0,
+        4.5
+      )
+    }
+    for (let i = 0; i < 12; i++) {
+      spawn(
+        'perfect',
+        Vector3.create(at.x, at.y, at.z),
+        Vector3.create(rand(-1, 1), rand(6, 9), rand(-1, 1)),
+        rand(0.4, 0.6),
+        rand(0.12, 0.2),
+        6
+      )
+    }
+  }
   for (let i = 0; i < 24; i++) {
     const angle = (i / 24) * Math.PI * 2
     const speed = rand(7, 9)

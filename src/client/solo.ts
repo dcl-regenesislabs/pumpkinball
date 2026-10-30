@@ -32,6 +32,7 @@ import {
   NPC_RING_RADIUS,
   NPC_RING_SPIN_DEG_PER_S,
   PARRY_LATE_GRACE_S,
+  PERFECT_PARRY_SOLO_SKIP,
   PUMPKIN_AIM_HEIGHT,
   PUMPKIN_BOB_HEIGHT,
   PUMPKIN_CHARGE_START_SCALE,
@@ -60,11 +61,12 @@ import {
 } from '../shared/config'
 import { room } from '../shared/messages'
 import { PlayerState } from '../shared/schemas'
-import { stepPumpkin } from '../shared/pumpkinSim'
+import { secondsToCover, stepPumpkin } from '../shared/pumpkinSim'
 import { Attack, bodyHeight, BossSpec, handHeight, LEVELS, NPCS, NpcDef, ShotKind, ZoneDef } from '../shared/soloLevels'
 import { blastFx, chargeFx, decoyTrail, flightPuff, parryBurst, spawnFx, splash, trailBubble, trailReset } from './effects'
 import { faceCameraAfter } from './cameraFace'
 import { parryFeedback } from './feedback'
+import { incoming } from './incoming'
 import { swing } from './parry'
 import { BAT_HIT_SFX, EVIL_LAUGH_SFX, HURT_SFX, MAGIC_SPELL2_SFX, MAGIC_SPELL_SFX, playSfx, playSfxAt, PUMPKIN_CAST_SFX, SWING_SFX, WIN_SFX } from './sfx'
 import { hooks, solo } from './soloState'
@@ -242,13 +244,33 @@ const tipped = new Set<string>()
 
 const level = () => LEVELS[Math.min(solo.level, LEVELS.length) - 1]
 
-/** True while a pumpkin is on its way to this player (the ground ring shows then). */
-export const soloPumpkinTargetsMe = () => solo.active && projs.some((p) => p.kind === 'real' && (p.state === 'hover' || p.state === 'fly'))
+/** True while a pumpkin is on its way to this player, including a boss batting one back at them (the ground ring shows then). */
+export const soloPumpkinTargetsMe = () =>
+  solo.active && projs.some((p) => p.kind === 'real' && (p.state === 'hover' || p.state === 'fly' || p.state === 'swing'))
 
 const playerPos = () => Transform.getOrNull(engine.PlayerEntity)?.position
 const playerAim = (): Vector3 | undefined => {
   const p = playerPos()
   return p ? Vector3.create(p.x, p.y + PUMPKIN_AIM_HEIGHT, p.z) : undefined
+}
+
+/** Seconds until the next pumpkin reaches you (negative once one has and is still unresolved), for the approach ring. */
+function nextPumpkinEta(): number | undefined {
+  const aim = playerAim()
+  if (!aim) return undefined
+  const toCover = (from: Vector3, chain: number, flightT: number) =>
+    secondsToCover(Vector3.distance(from, aim) - PUMPKIN_CONTACT_RADIUS, chain, flightT, level().speed)
+  let best: number | undefined
+  for (const p of projs) {
+    if (p.kind !== 'real') continue
+    let s: number
+    if (p.state === 'fly') s = p.arrivedAt > 0 ? (p.arrivedAt - Date.now()) / 1000 : toCover(p.pos, p.chain, p.flightT)
+    else if (p.state === 'hover') s = -p.flightT + toCover(p.pos, p.chain, 0)
+    else if (p.state === 'swing') s = VAMPIRE_SWING_HIT_S - p.timer + toCover(strike(p.owner), p.chain + 1, 0) // he is batting it back at you
+    else continue
+    if (best === undefined || s < best) best = s
+  }
+  return best
 }
 
 function tip(key: string, text: string) {
@@ -880,7 +902,7 @@ export function killOneBoss() {
 }
 
 /** The player loses a heart (a pumpkin, a blast, the closing circle). Returns true if that was the last one. */
-function damagePlayer(at: Vector3, why: string): boolean {
+function damagePlayer(at: Vector3, why: string, label = 'OUCH!'): boolean {
   if (solo.phase !== 'fight') return false
   solo.hp = Math.max(0, solo.hp - 1)
   splash(at)
@@ -889,7 +911,7 @@ function damagePlayer(at: Vector3, why: string): boolean {
     lose()
     return true
   }
-  parryFeedback.notice(`OUCH! ${why}${solo.hp} HP left`)
+  parryFeedback.notice(`${label} ${why}${solo.hp} HP left`)
   return false
 }
 
@@ -1208,11 +1230,14 @@ function trailStep(p: Proj) {
 }
 
 function parry(p: Proj) {
+  const grade = swing.grade(p.arrivedAt)
+  const perfect = grade === 'perfect'
   swing.consume()
-  parryFeedback.notice('PARRY!')
+  incoming.resolve(grade)
+  parryFeedback.notice(perfect ? 'PERFECT!' : 'PARRY!')
   parryFeedback.recordHit()
-  parryBurst(p.pos)
-  playSfx(BAT_HIT_SFX)
+  parryBurst(p.pos, perfect)
+  playSfx(BAT_HIT_SFX, perfect ? 1 : 0.8)
   if (!p.rally && !p.last) {
     // One of the first pumpkins of a volley: knocked away
     finishProj(p, true)
@@ -1220,6 +1245,7 @@ function parry(p: Proj) {
   }
   // A rally pumpkin, or the last one of a volley: it flies back to the boss (and the last one starts a rally)
   if (p.last) p.rally = true
+  if (perfect) p.returns += PERFECT_PARRY_SOLO_SKIP // counts as returns he already made: his guard breaks sooner
   p.state = 'back'
   p.chain++
   p.flightT = 0
@@ -1326,7 +1352,8 @@ function updateProj(p: Proj, dt: number) {
         else if (Date.now() - p.arrivedAt >= PARRY_LATE_GRACE_S * 1000) {
           const at = Vector3.clone(p.pos)
           finishProj(p)
-          damagePlayer(at, '')
+          incoming.resolve('miss')
+          damagePlayer(at, '', 'MISS!')
         }
       }
       return
@@ -1745,4 +1772,5 @@ function fightSystem(dt: number) {
   updateHazards(dt)
   for (const p of projs) drawProj(p)
   projs = projs.filter((p) => p.state !== 'done')
+  incoming.set(nextPumpkinEta())
 }

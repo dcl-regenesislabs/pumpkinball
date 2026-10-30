@@ -5,6 +5,7 @@ import { movePlayerTo } from '~system/RestrictedActions'
 import {
   LAVA_SURFACE_Y,
   PARRY_LATE_GRACE_S,
+  PERFECT_PARRY_SPEED_MULT,
   PUMPKIN_AIM_HEIGHT,
   PUMPKIN_CONTACT_RADIUS,
   PUMPKIN_MODEL,
@@ -14,11 +15,12 @@ import {
   PUMPKIN_BOB_HEIGHT
 } from '../shared/config'
 import { room } from '../shared/messages'
-import { stepPumpkin } from '../shared/pumpkinSim'
+import { secondsToCover, stepPumpkin } from '../shared/pumpkinSim'
 import { setupCameraFace } from './cameraFace'
 import { setupCameraLock } from './cameraLock'
 import { inCombat, setupControls } from './controls'
 import { parryFeedback } from './feedback'
+import { incoming } from './incoming'
 import { requestParry, sinceLastPress, swing, updateParryFeedback } from './parry'
 import { debug } from './debug'
 import { bloodSplat, setupBlood } from './blood'
@@ -125,7 +127,7 @@ export function initClient() {
     if (d.playerId === getPlayer()?.userId?.toLowerCase()) return // this client already showed its own burst
     const at = targetAimPosition(d.playerId)
     if (at) {
-      parryBurst(at)
+      parryBurst(at, d.perfect)
       playSfxAt(BAT_HIT_SFX, at)
     }
   })
@@ -145,7 +147,7 @@ export function initClient() {
       if (me) splash(Vector3.create(me.x, me.y + PUMPKIN_AIM_HEIGHT, me.z))
       playSfx(HURT_SFX)
     }
-    if (d.hp > 0) parryFeedback.notice(`OUCH! ${d.hp} HP left`)
+    if (d.hp > 0) parryFeedback.notice(`${d.hazard ? 'OUCH!' : 'MISS!'} ${d.hp} HP left`) // MISS: the pumpkin got through
   })
 
   // The teleport effect, for everyone, where the player left and where they land
@@ -198,21 +200,23 @@ function setupPumpkin() {
   let curTarget = ''
   let curNext = ''
   let curLevel = 0
+  let curBoost = 1 // this flight's speed multiplier (after a perfect parry)
   let pos = Vector3.Zero()
   let hoverLeft = 0
   let flightT = 0
   let arrivedAt = 0 // ms when the ball reached its target on this screen
   let reportedSeq = -1
 
-  const report = (kind: 'parry' | 'hit', me: string) => {
+  const report = (kind: 'parry' | 'hit', me: string, perfect = false) => {
     reportedSeq = curSeq
-    debug.resolve = `seq ${curSeq}: reported ${kind} | last press ${Math.round(sinceLastPress())}ms ago`
-    room.send('resolve', { seq: curSeq, kind, x: pos.x, y: pos.y, z: pos.z })
+    debug.resolve = `seq ${curSeq}: reported ${perfect ? 'perfect ' : ''}${kind} | last press ${Math.round(sinceLastPress())}ms ago`
+    room.send('resolve', { seq: curSeq, kind, perfect, x: pos.x, y: pos.y, z: pos.z })
+    incoming.resolve(kind === 'hit' ? 'miss' : perfect ? 'perfect' : 'good')
     if (kind === 'parry') {
-      parryFeedback.notice('PARRY!')
+      parryFeedback.notice(perfect ? 'PERFECT!' : 'PARRY!')
       parryFeedback.recordHit()
-      parryBurst(pos)
-      playSfx(BAT_HIT_SFX)
+      parryBurst(pos, perfect)
+      playSfx(BAT_HIT_SFX, perfect ? 1 : 0.8)
     } else {
       splash(pos) // instant local feedback; other players get it from the server's playerHit message
       playSfx(HURT_SFX)
@@ -223,6 +227,7 @@ function setupPumpkin() {
       curTarget = curNext
       curNext = ''
       curLevel++
+      curBoost = perfect ? PERFECT_PARRY_SPEED_MULT : 1
       hoverLeft = 0
       flightT = 0
       arrivedAt = 0
@@ -245,6 +250,7 @@ function setupPumpkin() {
       lastServerSeq = -1
       curSeq = -1
       trailReset()
+      incoming.set(undefined)
       return
     }
 
@@ -254,12 +260,14 @@ function setupPumpkin() {
         // The server confirmed the flight this client already started: keep it running, no snap.
         curNext = flight.nextTargetId
         curLevel = flight.level
+        curBoost = flight.boost || 1
       } else {
         // A flight this client didn't predict: start it from the published origin.
         curSeq = flight.seq
         curTarget = flight.targetId
         curNext = flight.nextTargetId
         curLevel = flight.level
+        curBoost = flight.boost || 1
         pos = Vector3.create(flight.ox, flight.oy, flight.oz)
         hoverLeft = flight.delayMs / 1000
         flightT = 0
@@ -273,7 +281,7 @@ function setupPumpkin() {
       flightT += dt
       const aim = targetAimPosition(curTarget)
       if (aim) {
-        pos = stepPumpkin(pos, aim, curLevel, flightT, dt)
+        pos = stepPumpkin(pos, aim, curLevel, flightT, dt, curBoost)
         trail(pos)
         if (arrivedAt === 0 && Vector3.distance(pos, aim) <= PUMPKIN_CONTACT_RADIUS) arrivedAt = Date.now()
       }
@@ -284,11 +292,22 @@ function setupPumpkin() {
     const me = getPlayer()?.userId?.toLowerCase()
     if (me && curTarget === me && arrivedAt > 0 && reportedSeq !== curSeq) {
       if (swing.live()) {
+        const grade = swing.grade(arrivedAt)
         swing.consume()
-        report('parry', me)
+        report('parry', me, grade === 'perfect')
       } else if (Date.now() - arrivedAt >= PARRY_LATE_GRACE_S * 1000) {
         report('hit', me)
       }
+    }
+
+    // When this player's own pumpkin gets to them, for the approach ring
+    if (me && curTarget === me && reportedSeq !== curSeq) {
+      const aim = targetAimPosition(me)
+      if (arrivedAt > 0) incoming.set((arrivedAt - Date.now()) / 1000)
+      else if (aim) incoming.set(hoverLeft + secondsToCover(Vector3.distance(pos, aim) - PUMPKIN_CONTACT_RADIUS, curLevel, flightT, curBoost))
+      else incoming.set(undefined)
+    } else {
+      incoming.set(undefined)
     }
     t.position = Vector3.create(pos.x, pos.y + Math.sin(tumble * 7) * PUMPKIN_BOB_HEIGHT, pos.z)
 
