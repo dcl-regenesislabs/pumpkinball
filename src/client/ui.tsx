@@ -336,16 +336,23 @@ const StartBanner = () => {
   )
 }
 
-/** Short pop-up under the hearts for what just happened: PARRY!, OUCH!, Missed. Pops in, then fades. */
+/** Short pop-up under the hearts for what just happened: PERFECT!, PARRY!, MISS! (the pumpkin got you), OUCH!, Too early! Pops in, then fades. */
 const FeedbackPop = (props: { text: string; age: number; top?: number }) => {
   const t = props.text
+  const perfect = t.startsWith('PERFECT')
   const good = t.startsWith('PARRY')
-  const bad = t.startsWith('OUCH')
-  const colour = good ? Color4.create(0.45, 1, 0.5, 1) : bad ? Color4.create(1, 0.35, 0.35, 1) : Color4.create(0.85, 0.85, 0.95, 1)
-  const edge = good ? Color4.create(0.3, 0.9, 0.4, 1) : bad ? DANGER_EDGE : Color4.create(0.6, 0.6, 0.75, 1)
+  const bad = t.startsWith('OUCH') || t.startsWith('MISS')
+  const colour = perfect
+    ? Color4.create(1, 0.88, 0.35, 1)
+    : good
+      ? Color4.create(0.45, 1, 0.5, 1)
+      : bad
+        ? Color4.create(1, 0.35, 0.35, 1)
+        : Color4.create(0.85, 0.85, 0.95, 1)
+  const edge = perfect ? Color4.create(1, 0.7, 0.15, 1) : good ? Color4.create(0.3, 0.9, 0.4, 1) : bad ? DANGER_EDGE : Color4.create(0.6, 0.6, 0.75, 1)
   const pop = easeOutBack(clamp01(props.age / 180))
   const fade = 1 - clamp01((props.age - (NOTICE_SHOW_MS - 250)) / 250)
-  const font = Math.max(8, Math.round(HS(34) * Math.max(0.2, pop)))
+  const font = Math.max(8, Math.round(HS(perfect ? 42 : 34) * Math.max(0.2, pop)))
   const w = estW(t, font) + HS(56)
   const h = Math.round(font * 1.7)
   return (

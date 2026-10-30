@@ -128,7 +128,7 @@ export function initServer() {
       }
     }
 
-    const result = pumpkin.resolve(address, data.seq, data.kind, Vector3.create(data.x, data.y, data.z))
+    const result = pumpkin.resolve(address, data.seq, data.kind, Vector3.create(data.x, data.y, data.z), data.perfect)
     room.send('resolveResult', { seq: data.seq, ok: result === 'ok', reason: result }, { to: [address] })
     if (result !== 'ok') {
       console.log(`[SERVER] rejected ${data.kind} from ${address} (seq ${data.seq}): ${result}`)
@@ -136,7 +136,7 @@ export function initServer() {
     }
     if (data.kind === 'parry') {
       consumedSwing.set(address, pressAt as number)
-      room.send('parryHit', { playerId: address })
+      room.send('parryHit', { playerId: address, perfect: data.perfect })
     }
   })
 

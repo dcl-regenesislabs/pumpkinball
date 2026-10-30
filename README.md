@@ -15,10 +15,12 @@ Works on desktop and on phones (touch controls).
 2. **Countdown** – once at least 2 players are queued, a 10-second countdown starts, then everyone is teleported onto the
    arena for a 3-2-1.
 3. **Survive** – the pumpkin locks onto a player (marked with a spinning ring on the ground). When it reaches you, parry it.
-   - Press **E** (or left click on desktop, the bat button on phones) to swing. Parry too early or too late and you take a hit.
-     Everyone has **3 HP**.
-   - A successful parry sends the pumpkin to another living player, faster each time. A missed swing has a short cooldown;
-     a good parry refunds it.
+   - Press **E** (or left click on desktop, the bat button on phones) to swing. Everyone has **3 HP**.
+   - **Timing**: as the pumpkin comes at you, a ring of glowing beads closes in on your ring (only you see it), warming from
+     orange to gold. Swing right as it lands on the rim for a **PERFECT** parry; a little earlier or later is still a normal
+     **PARRY**; too early or not at all is a **MISS** and the pumpkin hits you. Swinging too soon says "Too early!".
+   - A successful parry sends the pumpkin to another living player, faster each time. A **perfect** parry sends that flight
+     30% faster still. A missed swing has a short cooldown; a good parry refunds it.
 4. **Don't fall** – the arena is a raised ring surrounded by a toxic-green lava moat. Touching lava is instant elimination.
 5. **The Vampire joins in** – there is no time limit. The round heats up on its own:
 
@@ -52,7 +54,8 @@ other people's). Five levels, each against one or more bosses with their own att
 4. **Wizzir & Witch** – explosive pumpkins and fire rings, two bosses at once.
 5. **The Vampire Master** – everyone together, then the Vampire Master himself, who goes through a second phase.
 
-Parry a pumpkin back to hurt a boss. You have 3 hearts per level. Your progress (levels cleared) is saved on the server, and
+Parry a pumpkin back to hurt a boss: he bats it back a few times, then misses and is hurt. A **perfect** parry counts as one of his
+returns, so his guard breaks sooner. You have 3 hearts per level. Your progress (levels cleared) is saved on the server, and
 beating the whole run earns you a closing talk with the Vampire.
 
 ### In the lobby
@@ -98,7 +101,9 @@ You can also open the folder in the **Decentraland Creator Hub** to edit the lay
 ### Tuning and dev switches
 
 - **Gameplay numbers** (arena size, HP, countdown, pumpkin speed, parry timing, ...) live in
-  [src/shared/config.ts](src/shared/config.ts).
+  [src/shared/config.ts](src/shared/config.ts). The perfect parry (its window, its reward) is `PARRY_PERFECT_*` and
+  `PERFECT_PARRY_*`; the approach ring that shows the timing is `APPROACH_RING_*` (drawn in
+  [src/client/targetMarker.ts](src/client/targetMarker.ts)).
 - **The Vampire's pacing** (when he and the rings appear, how fast the pressure ramps, attack cadence, ring speed and gap
   width) is the `PACING` table in [src/shared/arenaHazards.ts](src/shared/arenaHazards.ts).
 - **Solo levels and boss combos** are in [src/shared/soloLevels.ts](src/shared/soloLevels.ts).

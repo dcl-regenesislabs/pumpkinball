@@ -1,12 +1,21 @@
 import { AvatarMask } from '@dcl/sdk/ecs'
 import { triggerSceneEmote } from '~system/RestrictedActions'
-import { LOBBY_SWING_COOLDOWN_MS, PARRY_BUFFER_MS, PARRY_COOLDOWN_MS, PARRY_EMOTE_SRC, PARRY_SWING_MS } from '../shared/config'
+import {
+  LOBBY_SWING_COOLDOWN_MS,
+  PARRY_BUFFER_MS,
+  PARRY_COOLDOWN_MS,
+  PARRY_EMOTE_SRC,
+  PARRY_PERFECT_LEAD_MS,
+  PARRY_PERFECT_MS,
+  PARRY_SWING_MS
+} from '../shared/config'
 import { room } from '../shared/messages'
 import { inCombat } from './controls'
 import { debug } from './debug'
 import { swingAtDummies } from './dummy'
 import { playSfx, SWING_SFX } from './sfx'
 import { parryFeedback } from './feedback'
+import { incoming } from './incoming'
 import { solo } from './soloState'
 
 let seq = 0
@@ -39,6 +48,11 @@ export const swing = {
     swingSpent = true
     missPending = false
     cooldownFrom = -Infinity
+  },
+  /** How well this swing was timed for a pumpkin that reached you at `arrivedAt` (ms): pressed right on the perfect moment, or not. */
+  grade(arrivedAt: number): 'perfect' | 'good' {
+    const offset = startedAt - (arrivedAt - PARRY_PERFECT_LEAD_MS) // ms from the perfect moment, negative = early
+    return Math.abs(offset) <= PARRY_PERFECT_MS ? 'perfect' : 'good'
   }
 }
 
@@ -89,6 +103,7 @@ export function updateParryFeedback() {
   if (missPending && Date.now() - startedAt > PARRY_SWING_MS) {
     missPending = false
     swingSpent = true
-    parryFeedback.notice('Missed')
+    const eta = incoming.eta()
+    parryFeedback.notice(eta !== undefined && eta > 0 ? 'Too early!' : 'Missed') // the pumpkin is still on its way: wait for the ring
   }
 }

@@ -101,6 +101,26 @@ export const SERVER_SWING_VALID_MS = 1500 // a parry claim needs a matching pres
 export const SERVER_PLAUSIBLE_S = 1.5 // claim is rejected if the server's own ball is further than this from impact
 export const SERVER_FALLBACK_S = 1.2 // no report this long after the server's ball arrives: the server applies the hit
 
+// Perfect parry. The "perfect moment" is a little before the pumpkin reaches you: the approach ring (client/targetMarker.ts) closes
+// onto the target ring right then. A press this close to it, either side, is PERFECT; any other press inside the swing window above
+// is a normal parry, and no press in time is a MISS (the pumpkin hits you).
+// With the numbers below: perfect = pressed 0-100 ms before contact; normal = up to 250 ms before or 50 ms after.
+export const PARRY_PERFECT_LEAD_MS = 50 // the perfect moment, this long before contact (keeps late reactions inside the window)
+export const PARRY_PERFECT_MS = 50 // half-width of the perfect window around that moment
+// The reward. In a match the pumpkin flies to its next target this many times faster (that flight only, still capped by
+// PUMPKIN_MAX_SPEED); 1 = a perfect parry is only a bigger effect. In a solo run a perfect parry counts as this many extra boss
+// returns, so his guard breaks sooner; 0 = no bonus.
+export const PERFECT_PARRY_SPEED_MULT = 1.3
+export const PERFECT_PARRY_SOLO_SKIP = 1
+
+// The approach ring: a ring of glowing beads around your own target ring that closes in on it as the pumpkin comes, landing on
+// its rim at the perfect moment. Only the hunted player sees theirs.
+export const APPROACH_RING_SECONDS = 1 // it appears this long before the perfect moment
+export const APPROACH_RING_START_SCALE = 3 // its starting size, times the target ring's
+export const APPROACH_RING_BEADS = 32 // sparse dots while far (out of focus), a near-solid ring once landed
+export const APPROACH_RING_BEAD_SIZE = 0.13 // metres, once it has closed in (beads start smaller and grow as it closes)
+export const APPROACH_RING_RIM = 0.92 // where it lands, as a fraction of TARGET_RING_RADIUS (the outer rim of TargetRing.glb)
+
 // Weapon held in the right hand. Currently the baseball bat (origin ~17 cm above the knob, length along +Y).
 // To switch back to the official sword: model 'assets/models/sword.glb', scale 0.7, offset y 0.1, roll 90.
 export const PARRY_EMOTE_SRC = 'assets/models/sword_attack_emote.glb' // must end with _emote.glb
