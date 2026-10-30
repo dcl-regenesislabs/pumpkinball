@@ -1,4 +1,4 @@
-import { engine, GltfContainer, InputAction, inputSystem, PointerEventType, Transform } from '@dcl/sdk/ecs'
+import { engine, GltfContainer, InputAction, inputSystem, PointerEventType, PointerLock, Transform } from '@dcl/sdk/ecs'
 import { getPlayer } from '@dcl/sdk/src/players'
 import { Color4, Quaternion, Vector3 } from '@dcl/sdk/math'
 import { movePlayerTo } from '~system/RestrictedActions'
@@ -47,6 +47,8 @@ import { setupSolo } from './solo'
 import { solo } from './soloState'
 import { setupSoloVisibility } from './soloVisibility'
 import { setupVampire } from './vampire'
+
+const CLICK_LOCK_SETTLE_MS = 150 // a left click swings only if the cursor was already locked this long (not the click that locked it)
 
 export function initClient() {
   preloadSfx()
@@ -99,9 +101,19 @@ export function initClient() {
   })
   // Left click swings too, on desktop, once a game has started (a match or a solo run). Not in the lobby, so clicking
   // things there (the Vampire, dialogs) never swings, and not during the level intro or after a level ends.
+  // Only while the cursor is locked (the mouse steers the camera): with a free cursor a left click grabs or turns the camera,
+  // and a swing then would burn the cooldown just as a pumpkin may be coming. The click that locks the cursor doesn't swing either.
+  let lockedSince = -Infinity // when the cursor got locked; Infinity = it is free
   engine.addSystem(() => {
+    const lock = PointerLock.getOrNull(engine.CameraEntity)
+    const locked = lock ? lock.isPointerLocked : true // a client that doesn't report it keeps the old behaviour
+    if (!locked) lockedSince = Infinity
+    else if (lockedSince === Infinity) lockedSince = Date.now()
+
     if (isMobile() || !inCombat() || solo.intro || (solo.active && solo.phase !== 'fight')) return
-    if (inputSystem.isTriggered(InputAction.IA_POINTER, PointerEventType.PET_DOWN)) requestParry()
+    if (!inputSystem.isTriggered(InputAction.IA_POINTER, PointerEventType.PET_DOWN)) return
+    if (Date.now() - lockedSince >= CLICK_LOCK_SETTLE_MS) requestParry()
+    else debug.press = 'press: click ignored (camera click, cursor not locked)'
   })
 
   room.onMessage('resolveResult', (d) => {
