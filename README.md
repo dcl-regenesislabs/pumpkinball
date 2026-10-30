@@ -15,8 +15,9 @@ Works on desktop and on phones (touch controls).
 2. **Countdown** – once at least 2 players are queued, a 10-second countdown starts, then everyone is teleported onto the
    arena for a 3-2-1.
 3. **Survive** – the pumpkin locks onto a player (marked with a spinning ring on the ground). When it reaches you, parry it.
-   - Press **E** (or left click on desktop, the bat button on phones) to swing. Everyone has **3 HP**. A left click with a free
-     cursor only grabs the camera: it swings once the mouse is steering the camera.
+   - Press **E** (or left click on desktop, the bat button on phones) to swing. Everyone has **3 HP**. With a free cursor, holding the
+     left button and dragging turns the camera instead; a quick click (released within 250 ms, camera not turned) swings, and it
+     counts from the moment you pressed, so the timing is the same as with E.
    - **Timing**: as the pumpkin comes at you, a ring of glowing beads closes in on your ring (only you see it), warming from
      orange to gold. Swing right as it lands on the rim for a **PERFECT** parry; a little earlier or later is still a normal
      **PARRY**; too early or not at all is a **MISS** and the pumpkin hits you. Swinging too soon says "Too early!".
